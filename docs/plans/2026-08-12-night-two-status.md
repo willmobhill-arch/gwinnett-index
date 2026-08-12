@@ -148,6 +148,28 @@ page and twin: *the linked PDF is the record; the extracted fields are a finding
 The honest framing is that Duluth's 109 rows are an index into 353 meeting documents, and
 the OCR pass that was never completed is what would turn them into records.
 
+### The OCR pass never completed because it never started
+
+`ocr_scanned.py` required `local_path` on every row and skipped anything without it.
+Nothing in the published corpus carries that field, so the queue came out **empty**: it
+printed `OCR queue: 0`, wrote an output file identical to its input, and exited 0. It
+has read for two sessions as a slow job. It was a job that never ran.
+
+Fixed, plus two things that would have corrupted the result had it run:
+
+- It OCR'd **whole documents** and stamped `text_source='ocr'`. Seven of the scanned
+  documents are packets carrying real publisher text — one is a 382-page binder with
+  154 scanned pages and **449,287 characters** of genuine text. Now only pages without
+  a text layer are OCR'd, and `text_source='mixed'` carries `ocr_page_numbers` so a
+  consumer knows exactly which half is a reconstruction. Needed a migration: the CHECK
+  allowed only `embedded|ocr|none`.
+- `MAX_PAGES=60` capped every document silently and would have dropped **417 of the
+  queue's 1,059 pages** — 39%, and 322 of them from that one binder, whose scanned
+  pages are the signed decision record. No cap now.
+
+13 tests cover it with the PDF reader and tesseract stubbed out — neither is installed
+here, and neither is where any of this went wrong.
+
 ### The 11× token-reduction claim was wrong
 
 Measured across the build, the `.md` twins are **5.7× smaller** than their HTML (median;
@@ -202,7 +224,7 @@ still 1,546/1,546.
 | **Register a domain** | Everything absolute is driven by `SITE_URL`; the build warns loudly when it is unset and CI skips the crawler check without it. |
 | Deploy | Cloudflare Pages for `site/`, `wrangler deploy` for `worker/`. `SUPABASE_ANON_KEY` goes in as a Worker secret. |
 | MCP registry listing | After deploy, as `org.<domain>/gwinnett-index`. |
-| Duluth OCR pass | Still the highest-value data work. It is what turns 109 index entries into records with vote counts. |
+| **Run** the Duluth OCR pass | Script is fixed and tested; it has still never been *run*. No tesseract here and duluthga.net is blocked. 91 docs / 1,059 pages, ~1 hour single-threaded. See `ingest/duluth_agendas/README.md`. |
 | 262 applicant merge candidates | Still queued. |
 | 17 unverified UDC tables | Still unverified. Their cell values are withheld from the snapshot by design. |
 | `developer_activity` consultant misclassification | Carter Engineering and Ridgeline Land Planning still read as developers; needs the manual pass on the top 50. |
@@ -213,6 +235,10 @@ still 1,546/1,546.
 2. Register the domain, deploy both, set `SITE_URL` and the `SUPABASE_ANON_KEY` secret,
    then watch the crawler-access job go green — that is the moment the premise is proven.
 3. Run the Duluth OCR pass locally and regenerate `duluth_cases.jsonl`. Everything else
-   is polish next to this.
+   is polish next to this. The script no longer no-ops: it fails loudly if it cannot find
+   the PDFs, OCRs only the pages that lack text, and checkpoints per document so an
+   interrupted run resumes. Then revisit `parse_cases.py` against the OCR'd *minutes* —
+   the current field extraction was tuned against agendas, which is why 61% of locations
+   have no street number in them.
 4. Peachtree Corners as the first adapter-reuse test. If it needs new *code* rather than a
    new *config*, stop and fix the adapter layer before adding city three.

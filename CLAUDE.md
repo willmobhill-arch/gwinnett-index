@@ -140,6 +140,18 @@ not by an error.
 - **Trigram similarity alone will false-merge.** "CKK DEVELOPMENT SERVICES" and
   "SCI DEVELOPMENT SERVICES" score 0.75 on a shared industry phrase. Auto-merge
   only on tight edit distance; queue the rest.
+- **A queue of zero is a bug, not a result.** The OCR pass required `local_path`
+  on every row; nothing in the published corpus has that field, so it printed
+  `OCR queue: 0`, wrote an output identical to its input, and exited 0. It looked
+  for two sessions like a job that was slow. It was a job that never started.
+- **Don't relabel a document by its worst page.** OCRing a partially-scanned
+  382-page packet and stamping `text_source='ocr'` on it would have recast 449,287
+  characters of real publisher text as a reconstruction. Provenance is per-page;
+  `mixed` + `ocr_page_numbers` is the honest shape.
+- **A silent cap is a silent deletion.** `MAX_PAGES=60` would have dropped 417 of
+  the OCR queue's 1,059 pages. Caps default to off and name what they drop.
+- **For grants, check the ACL, not the exit code.** `REVOKE` against a grant made
+  by another role returns success and changes nothing. Read `pg_proc.proacl`.
 - **`cmd && heredoc` swallows the heredoc when `cmd` fails.** A `cd x && cat > f`
   chain silently skipped one migration file. Caught only because every file was
   md5-checked against the database. Write files with absolute paths.
@@ -195,10 +207,13 @@ GROUP BY 1;
   applicant field that ran on into a mailing address, only 13 carry a zoning
   district. Published as `stats.duluth_extraction` and flagged on every affected
   page. The linked PDF is the record; the fields point at it.
-- **Duluth minutes are 57–69% scanned** with no text layer. OCR pass exists
-  (`ingest/duluth_agendas/ocr_scanned.py`) but has never completed — re-run it
-  locally, then regenerate `duluth_cases.jsonl`. **This is the single highest-value
-  data task left**: it is what turns those 109 index entries into records.
+- **Duluth minutes are 57–69% scanned** with no text layer — precisely, **83 of
+  138 minutes**. The OCR pass (`ingest/duluth_agendas/ocr_scanned.py`) is fixed and
+  tested but **has still never been run**: this container has no tesseract and
+  cannot reach duluthga.net. Run it locally, then regenerate `duluth_cases.jsonl`.
+  Queue is 91 documents / 1,059 pages — an hour single-threaded, minutes across
+  cores. **This is the single highest-value data task left**: it is what turns
+  those 109 index entries into records with vote counts.
 - **`developer_activity` includes engineering/planning consultants** (Carter
   Engineering, Ridgeline Land Planning) that file as agents without a `C/O`
   marker. The `kind` classifier can't catch that from the name alone — needs a
