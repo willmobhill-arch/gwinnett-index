@@ -42,7 +42,7 @@ Built: `db/migrations/` (all 17, md5-verified against the live project),
 `site/` (Astro, 9 route families, full agent surface), `worker/` (REST + MCP,
 5 tools, 10 protocol tests).
 
-Not done: **RLS is still off** (see below), no domain, nothing deployed.
+Not done: no domain, nothing deployed. RLS is on and verified.
 
 ## Non-negotiables
 
@@ -58,12 +58,15 @@ The bulk export is gated on this: `verify-build.mjs` gunzips it and fails if any
 line carries `boundary`, `geometry`, `rings`, `wkt` or `coordinates`. A licence
 breach here would look completely fine on every page.
 
-**RLS is off and the API makes that urgent.** With RLS disabled, PostgREST
-exposes INSERT/UPDATE/DELETE on every `public` table to `anon` — and the anon key
-is publishable by design, so it lives in a Worker binding and in anyone's network
-tab. `db/migrations/20260812170000_public_read_only_rls.sql` fixes it and is
-**deliberately not applied**; it needs a human decision. Ingestion is unaffected
-because every loader runs inside Postgres as the owner.
+**The database is read-only to the public, and must stay that way.** RLS is on
+across all 14 tables with `SELECT`-only policies, writes revoked at the grant
+level too, `developer_activity` switched to `security_invoker`, and `search_path`
+pinned on all 13 project functions. This is what makes the anon key safe to ship
+in a Worker binding. Ingestion is unaffected — every loader runs inside Postgres
+as the owner, and RLS does not apply to the owner. **Verify changes here as the
+`anon` role, not as the owner**, and for grants check `pg_proc.proacl` rather
+than the absence of an error: a `REVOKE` against another grantor's grant returns
+success and does nothing.
 
 **County case layers are unincorporated-only.** Every record in `GC_Planning`
 layers 1/2/15 is a Board of Commissioners decision. City cases are NOT in there.
@@ -206,16 +209,15 @@ GROUP BY 1;
 
 ## Next phase
 
-1. **Apply the RLS migration.** One decision; the API is not safe to publish first.
-2. Register a domain, set `SITE_URL`, deploy `site/` to Cloudflare Pages and
+1. Register a domain, set `SITE_URL`, deploy `site/` to Cloudflare Pages and
    `worker/` via `wrangler deploy` with `SUPABASE_ANON_KEY` as a secret.
-3. **Verify Cloudflare Bot Fight Mode is OFF.** CI already asserts a 200 for
+2. **Verify Cloudflare Bot Fight Mode is OFF.** CI already asserts a 200 for
    GPTBot/ClaudeBot/PerplexityBot/CCBot against the live origin, on push and
    weekly. It silently 403s AI crawlers regardless of robots.txt and would defeat
    the entire premise while every page looks fine in a browser.
-4. List the MCP server in the registry as `org.<domain>/gwinnett-index`.
-5. Duluth OCR pass.
-6. Only then widen: Peachtree Corners and Norcross are mostly config.
+3. List the MCP server in the registry as `org.<domain>/gwinnett-index`.
+4. Duluth OCR pass.
+5. Only then widen: Peachtree Corners and Norcross are mostly config.
 
 ## Style
 

@@ -1,8 +1,9 @@
 -- Row Level Security: read-only public access.
 --
--- NOT YET APPLIED. Review before running — see docs/plans/2026-08-12-night-two-status.md.
+-- Applied 2026-08-12. Verified as the anon role: SELECT works everywhere, INSERT/
+-- UPDATE/DELETE all raise insufficient_privilege.
 --
--- Why this is needed now rather than later: the API Worker and the site both
+-- Why this was needed: the API Worker and the site both
 -- authenticate with the Supabase *anon* key, which is publishable by design and
 -- ends up in a Worker binding and, eventually, in anyone's network tab. With RLS
 -- disabled, that key is not read-only — PostgREST exposes INSERT, UPDATE and

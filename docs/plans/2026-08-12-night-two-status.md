@@ -6,30 +6,47 @@
 
 ---
 
-## ⚠️ One decision needed from you
+## ✅ Row Level Security — applied
 
-**Row Level Security is off, and that is not a theoretical problem now that there is
-an API.** With RLS disabled, PostgREST exposes `INSERT`, `UPDATE` and `DELETE` on every
+**Applied 2026-08-12**, after your go-ahead. Recorded here because the reasoning
+matters more than the fact.
+
+The problem: with RLS disabled, PostgREST exposed `INSERT`, `UPDATE` and `DELETE` on every
 table in the `public` schema to the `anon` role. The Worker and the site both
 authenticate with the anon key, which is *publishable by design* — it lives in a Worker
-binding and ends up in anyone's network tab.
+binding and ends up in anyone's network tab. Anyone with the project URL and that key
+could have rewritten the 11,848-case corpus, and nothing about the site would have
+looked different afterwards.
 
-So today, anyone with the project URL and that key can rewrite the 11,848-case corpus,
-and nothing about the site would look different afterwards.
+The fix was not to hide the key. It was to make the key harmless.
 
-The fix is not to hide the key; it is to make the key harmless. A migration is written
-and **not applied**:
+`20260812170000_public_read_only_rls.sql` — RLS on all 14 project tables, `SELECT`
+granted to `anon` and `authenticated`, writes revoked at the grant level as well as the
+policy level. Ingestion is unaffected: every loader runs *inside* Postgres as the table
+owner, and RLS does not apply to the owner.
 
-```
-db/migrations/20260812170000_public_read_only_rls.sql
-```
+**Verified as the `anon` role, not as the owner** — reads work on every table and
+through `resolve_jurisdiction()`; `INSERT`, `UPDATE` and `DELETE` each raise
+`insufficient_privilege`. Resolver fixture re-scored after: 1,546/1,546, unchanged.
 
-It enables RLS on all 14 project tables, grants `SELECT` to `anon` and `authenticated`,
-and revokes writes at the grant level as well as the policy level. Ingestion is
-unaffected — every loader runs *inside* Postgres as the table owner, and RLS does not
-apply to the owner. `spatial_ref_sys` is deliberately left alone (extension-owned).
+`20260812170500_tighten_view_and_function_security.sql` — three more things the linter
+surfaced once RLS was on:
 
-Nothing else in this session depends on it. Say the word and I will apply it.
+- `developer_activity` was a **SECURITY DEFINER view**, so it ran with the creator's
+  permissions and bypassed the caller's RLS entirely. Now `security_invoker = on`.
+- **13 functions had a mutable `search_path`**, meaning name resolution inside them
+  followed the *caller's* path. All pinned to `public, extensions, pg_temp`.
+- `st_estimatedextent` is SECURITY DEFINER and exposed via PostgREST. **The revoke did
+  not work and I initially thought it had.** PostGIS's grants were made by
+  `supabase_admin`; a `REVOKE` issued as `postgres` against another grantor's grant is a
+  silent no-op that returns success. Caught by checking `pg_proc.proacl` rather than
+  trusting the absence of an error. Low stakes — it is an existence oracle for tables
+  whose entire contents are published under CC0 — but the lesson generalises: for
+  grants, verify the ACL, never the exit code.
+
+Still open by choice: `spatial_ref_sys` RLS (extension-owned, projection definitions
+only) and PostGIS/pg_trgm living in `public` (relocating would rewrite every spatial
+index for a tidiness warning).
 
 ---
 
