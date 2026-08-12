@@ -63,10 +63,24 @@ RE_DECISION = re.compile(
     re.I)
 
 # "Voted For: Council members Park, Thomas, Doss ... Motion carried."
+#
+# The clerk is not consistent, and this is not cosmetic: across the OCR'd minutes
+# the tally line appears 330 times as "Voted for/For" but 93 times as "Voting
+# for", and the colon is sometimes absent. Matching only "Voted For:" silently
+# dropped every decision written the other way -- the same trap as the
+# "Case:" vs "CASE" guard that once skipped every council packet.
+VOTE_FOR = r"Vot(?:ed|ing)\s+for"
+VOTE_AGAINST = r"Vot(?:ed|ing)\s+against"
 RE_VOTE = re.compile(
-    r"Voted\s+For:\s*(?P<for>.{0,220}?)\s*(?:Voted\s+Against:\s*(?P<against>.{0,160}?)\s*)?"
+    VOTE_FOR + r"\s*:?\s*(?P<for>.{0,220}?)\s*"
+    r"(?:" + VOTE_AGAINST + r"\s*:?\s*(?P<against>.{0,160}?)\s*)?"
     r"(?P<result>Motion\s+(?:carried|failed)[^\n.]{0,40})",
     re.I | re.S)
+
+# OCR output labels each reconstructed page "[page N]". Useful for tracing a value
+# back to a page; not something that should ever land inside an address or a
+# request string.
+RE_PAGE_MARKER = re.compile(r"\[page\s+\d+\]\s*")
 
 TYPE_BY_PREFIX = {
     "Z": "rezoning",
@@ -86,7 +100,10 @@ RE_ZONE_CHANGE = re.compile(
 
 
 def squash(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "")).strip(" ,;–-")
+    # Strip OCR page labels before collapsing whitespace: they are provenance for
+    # the text as a whole, not content of any field that happens to span a page.
+    s = RE_PAGE_MARKER.sub(" ", s or "")
+    return re.sub(r"\s+", " ", s).strip(" ,;–-")
 
 
 def split_rest(rest: str) -> tuple[str, str]:
