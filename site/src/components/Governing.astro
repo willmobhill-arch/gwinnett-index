@@ -1,0 +1,44 @@
+---
+/**
+ * The bordered callout that must appear before any substantive answer on every
+ * page. Stating the governing jurisdiction is the product; burying it under a
+ * setback number would defeat the point of the whole index.
+ */
+import type { Jurisdiction } from '../lib/source';
+interface Props { j: Jurisdiction; }
+const { j } = Astro.props;
+
+const isUninc = j.kind === 'unincorporated';
+const isContainer = j.kind === 'county';
+---
+<div class="callout">
+  <div class="label">Governing jurisdiction</div>
+  <div class="who">{j.name}</div>
+  {isUninc && (
+    <p>
+      Addresses here carry city mailing addresses — Duluth, Lawrenceville, Snellville,
+      Buford — but are <strong>not</strong> in those cities. They are governed by the
+      Gwinnett County Unified Development Ordinance, heard by the County Planning
+      Commission, and decided by the Board of Commissioners. This is
+      <strong>67.3% of the county's land area</strong>: the default case, not the edge case.
+    </p>
+  )}
+  {isContainer && (
+    <p>
+      This is the county container boundary, used for area accounting. It is not itself a
+      governing jurisdiction — any given address inside it is governed either by one of the
+      17 municipalities or by <a href="/j/unincorporated-gwinnett">unincorporated Gwinnett</a>.
+    </p>
+  )}
+  {j.kind === 'municipality' && (
+    <p>
+      Land inside these city limits is governed by {j.name}'s own code and boards.
+      {/^[AEIOU]/.test(j.name) ? 'An' : 'A'} "{j.name}, GA" mailing address is <strong>not</strong> proof of being inside them —
+      most such addresses fall in
+      <a href="/j/unincorporated-gwinnett"> unincorporated Gwinnett</a>.
+    </p>
+  )}
+  <p class="sub" style="margin-top:.5rem">
+    Boundary: {j.boundary_source ?? 'unknown'}{j.boundary_vintage ? `, vintage ${j.boundary_vintage}` : ''}.
+  </p>
+</div>

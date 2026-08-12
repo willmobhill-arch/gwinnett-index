@@ -1,0 +1,132 @@
+---
+import { SITE, TITLE, LICENCE, LICENCE_URL } from '../lib/site';
+import { usingFixtures } from '../lib/source';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** path of the .md twin for this page, if it has one */
+  twin?: string;
+  jsonld?: Record<string, unknown> | Record<string, unknown>[];
+}
+const { title, description, twin, jsonld } = Astro.props;
+const canonical = new URL(Astro.url.pathname.replace(/\/$/, '') || '/', SITE).href;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} — {TITLE}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonical} />
+    {twin && <link rel="alternate" type="text/markdown" href={twin} title="Markdown twin" />}
+    <link rel="license" href={LICENCE_URL} />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    {jsonld && (
+      <script type="application/ld+json" set:html={JSON.stringify(jsonld)} />
+    )}
+    <style is:global>
+      :root {
+        --ink: #14140f;
+        --ink-soft: #55554c;
+        --line: #d8d5cb;
+        --bg: #fbfaf7;
+        --accent: #7a2b18;
+        --warn-bg: #fdf6e6;
+        --warn-line: #d9bf7a;
+        --measure: 38rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #ece9e1; --ink-soft: #a3a096; --line: #383630;
+          --bg: #16150f; --accent: #e8a48c; --warn-bg: #241f10; --warn-line: #6b5a2c;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 ui-serif, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+      }
+      main, header.site, footer.site { max-width: 52rem; margin: 0 auto; padding: 0 1.25rem; }
+      header.site { padding-top: 2rem; padding-bottom: 1rem; }
+      header.site a.brand { font-weight: 600; text-decoration: none; color: var(--ink); letter-spacing: -0.01em; }
+      header.site nav { margin-top: .35rem; font-size: .82rem; color: var(--ink-soft); }
+      header.site nav a { color: var(--ink-soft); margin-right: 1rem; }
+      h1 { font-size: 1.6rem; line-height: 1.25; margin: 1.2rem 0 .3rem; letter-spacing: -0.015em; }
+      h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; letter-spacing: .02em; text-transform: uppercase;
+           font-family: ui-sans-serif, system-ui, sans-serif; color: var(--ink-soft); font-weight: 600; }
+      h3 { font-size: 1rem; margin: 1.4rem 0 .3rem; }
+      p, li { max-width: var(--measure); }
+      a { color: var(--accent); text-underline-offset: 2px; }
+      .lede { color: var(--ink-soft); margin-top: 0; }
+      .sub { color: var(--ink-soft); font-size: .85rem; }
+      code, .mono, table { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+      table { border-collapse: collapse; font-size: .82rem; width: 100%; margin: .75rem 0; }
+      .scroll { overflow-x: auto; }
+      th, td { text-align: left; padding: .35rem .6rem .35rem 0; border-bottom: 1px solid var(--line);
+               vertical-align: top; }
+      th { font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+      dl.facts { display: grid; grid-template-columns: 12rem 1fr; gap: .1rem 1rem; margin: .75rem 0;
+                 font-size: .9rem; }
+      dl.facts dt { color: var(--ink-soft); }
+      dl.facts dd { margin: 0; }
+      @media (max-width: 34rem) { dl.facts { grid-template-columns: 1fr; }
+        dl.facts dd { margin-bottom: .5rem; } }
+      .callout { border: 1px solid var(--line); border-left: 3px solid var(--accent);
+                 padding: .9rem 1.1rem; margin: 1.25rem 0; background: transparent; }
+      .callout .label { font-family: ui-sans-serif, system-ui, sans-serif; font-size: .7rem;
+                        letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+      .callout .who { font-size: 1.05rem; font-weight: 600; margin: .15rem 0 .4rem; }
+      .callout p { margin: .3rem 0 0; font-size: .88rem; }
+      .flag { border: 1px solid var(--warn-line); background: var(--warn-bg); padding: .7rem .9rem;
+              margin: 1rem 0; font-size: .85rem; }
+      .flag p { margin: 0; }
+      ul.plain { list-style: none; padding: 0; }
+      ul.plain li { padding: .35rem 0; border-bottom: 1px solid var(--line); max-width: none; }
+      footer.site { margin: 4rem 0 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
+                    font-size: .8rem; color: var(--ink-soft); }
+      footer.site a { color: var(--ink-soft); }
+      .md-link { font-family: ui-sans-serif, system-ui, sans-serif; font-size: .72rem;
+                 letter-spacing: .06em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <header class="site">
+      <a class="brand" href="/">Gwinnett Index</a>
+      <nav>
+        <a href="/j">Jurisdictions</a><a href="/developer">Developers</a
+        ><a href="/status">Status &amp; freshness</a><a href="/llms.txt">llms.txt</a>
+      </nav>
+    </header>
+    <main>
+      {usingFixtures && (
+        <div class="flag">
+          <p><strong>Sample build.</strong> This site was built from
+          <code>site/fixtures</code>, not from the full corpus. Counts on these
+          pages are a handful of records, not the 11,848 in the index.</p>
+        </div>
+      )}
+      <slot />
+      {twin && (
+        <p class="md-link" style="margin-top:2.5rem">
+          <a href={twin}>Markdown version of this page →</a>
+        </p>
+      )}
+    </main>
+    <footer class="site">
+      <p>
+        Gwinnett Index is a mirror and derived analysis, not the system of record.
+        Every record carries its <code>source_url</code> and <code>last_verified</code>.
+        Published under <a href={LICENCE_URL}>{LICENCE}</a>.
+      </p>
+      <p>
+        Jurisdiction boundaries are US Census TIGER (public domain). Parcel and zoning
+        geometry is queried live from Gwinnett County GIS and never rehosted.
+      </p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,100 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Governing from '../../../components/Governing.astro';
+import { codeSections, codeTables, bySlug } from '../../../lib/source';
+import { codeSlug } from '../../../lib/format';
+import { abs } from '../../../lib/site';
+
+export function getStaticPaths() {
+  const secs = codeSections().map((s) => ({
+    params: { jurisdiction: s.jurisdiction, cite: codeSlug(s.citation) },
+    props: { section: s, table: null },
+  }));
+  const tabs = codeTables().map((t) => ({
+    params: { jurisdiction: t.jurisdiction, cite: codeSlug(t.citation) },
+    props: { section: null, table: t },
+  }));
+  const seen = new Set<string>();
+  return [...secs, ...tabs].filter((p) => {
+    const k = `${p.params.jurisdiction}/${p.params.cite}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+const { section, table } = Astro.props;
+const { jurisdiction, cite } = Astro.params;
+const j = bySlug(jurisdiction!)!;
+const item = section ?? table!;
+const title = item.citation;
+
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'Legislation',
+  name: title,
+  alternateName: (section?.title ?? table?.title) ?? undefined,
+  legislationJurisdiction: { '@type': 'AdministrativeArea', name: `${j.name}, Georgia` },
+  legislationDate: section?.adopted_date ?? undefined,
+  dateModified: section?.amended_through ?? undefined,
+  url: abs(`/code/${j.slug}/${cite}`),
+  isBasedOn: item.source_url,
+  sdPublisher: { '@type': 'Organization', name: 'Gwinnett Index' },
+  license: 'https://creativecommons.org/publicdomain/zero/1.0/',
+};
+---
+<Base title={title} description={(section?.title ?? table?.title) ?? title}
+      twin={`/code/${j.slug}/${cite}.md`} jsonld={jsonld}>
+  <h1>{title}</h1>
+  {(section?.title ?? table?.title) && <p class="lede">{section?.title ?? table?.title}</p>}
+  <Governing j={j} />
+
+  <dl class="facts">
+    {section?.article && (<><dt>Article</dt><dd>{section.article} — {section.article_title}</dd></>)}
+    <dt>Pages in source</dt>
+    <dd>{item.page_from}{item.page_to && item.page_to !== item.page_from ? `–${item.page_to}` : ''}</dd>
+    {section?.adopted_date && (<><dt>Adopted</dt><dd>{section.adopted_date}</dd></>)}
+    {section?.amended_through && (<><dt>Amended through</dt><dd>{section.amended_through}</dd></>)}
+    <dt>Source</dt><dd><a href={item.source_url}>Adopted PDF</a></dd>
+  </dl>
+
+  {table && table.quality !== 'verified' && (
+    <div class="flag">
+      <p>
+        <strong>Unverified extraction.</strong> This table was recovered from the PDF
+        programmatically and has never been compared cell-by-cell against the rendered source
+        page. Table extraction fails quietly — a value can land in the wrong column and still
+        look entirely plausible. Do not rely on these numbers; open the source page.
+      </p>
+    </div>
+  )}
+  {table && table.quality === 'verified' && table.verification_note && (
+    <div class="flag">
+      <p><strong>Verified.</strong> {table.verification_note}</p>
+    </div>
+  )}
+
+  {section?.body_md && (
+    <>
+      <h2>Text</h2>
+      <div style="white-space:pre-wrap">{section.body_md}</div>
+    </>
+  )}
+
+  {table?.header && table.rows && table.rows.length > 0 && (
+    <>
+      <h2>Table</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr>{table.header.map((h) => <th>{h}</th>)}</tr></thead>
+          <tbody>{table.rows.map((r) => <tr>{r.map((v) => <td>{v}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  )}
+  {table && (!table.rows || table.rows.length === 0) && (
+    <p class="sub">
+      {table.n_rows} rows × {table.n_cols} columns extracted; the cell values are held in the
+      database but are not published here while the extraction is unverified.
+    </p>
+  )}
+</Base>

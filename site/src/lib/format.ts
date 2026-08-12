@@ -1,0 +1,50 @@
+import type { Case, Jurisdiction } from './source';
+
+export const num = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : n.toLocaleString('en-US');
+
+export const acres = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} ac`;
+
+export const date = (d: string | null | undefined) => (d ? d.slice(0, 10) : '—');
+
+export const kindLabel = (k: Jurisdiction['kind']) =>
+  k === 'unincorporated' ? 'Unincorporated county'
+  : k === 'municipality' ? 'Municipality'
+  : 'County (container)';
+
+/**
+ * Decision and recommendation values are reproduced EXACTLY as the county
+ * publishes them (APC, DEN, REC, WD, TBL ...). The source GIS layer ships no
+ * data dictionary for these codes, so expanding them here would mean guessing
+ * at the meaning of a legal outcome and presenting the guess as fact. The raw
+ * code plus a link to the Accela record is the honest rendering.
+ */
+export const rawCode = (v: string | null | undefined) => (v && v !== 'NA' && v !== 'N/A' ? v : '—');
+
+export const zone = (v: string | null | undefined) => (v && v !== 'NA' ? v : '—');
+
+export const caseTitle = (c: Case) =>
+  [c.case_number, c.proposed_use ?? c.request_text ?? '']
+    .filter(Boolean).join(' — ').trim();
+
+export const casePath = (c: Case) => `/case/${c.jurisdiction}/${encodeURIComponent(c.case_number)}`;
+
+/** Cases whose text fields came out of an agenda PDF rather than a database. */
+export const isMined = (c: Case) => c.source_system === 'duluth-agenda-mining';
+
+/**
+ * URL segment for a code item.
+ *
+ * Sections key off their identifier (`101.02`) because that is what a citation
+ * in a staff report or a court filing actually says. Tables have no numeric
+ * identifier, so their citation tail is slugified: "Duluth UDC Table 2-B"
+ * becomes "table-2-b". Both are stable across re-extractions of the PDF, which
+ * matters — these URLs are meant to be cited.
+ */
+export const codeSlug = (citation: string) => {
+  const tail = citation.replace(/^.*?UDC\s*/i, '').replace(/^§\s*/, '').trim();
+  return /^[\d.]+$/.test(tail)
+    ? tail
+    : tail.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+};

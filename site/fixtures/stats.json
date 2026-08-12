@@ -1,0 +1,111 @@
+{
+ "total_cases": 11848,
+ "county_cases": 11739,
+ "duluth_cases": 109,
+ "first_year": 1970,
+ "last_year": 2026,
+ "with_source_url": 11597,
+ "with_pins": 10804,
+ "res_units": 318100,
+ "acres": 170102,
+ "applicants": 7369,
+ "applicant_variants": 8245,
+ "merge_pending": 262,
+ "code_sections": 858,
+ "code_tables": 18,
+ "code_tables_verified": 1,
+ "meeting_docs": 353,
+ "meeting_pages": 7873,
+ "probes": 1915,
+ "resolver": {
+  "high": {
+   "probes": 1546,
+   "correct": 1546
+  },
+  "low": {
+   "probes": 361,
+   "correct": 347
+  },
+  "unresolved": {
+   "probes": 8,
+   "correct": 0
+  }
+ },
+ "case_types": [
+  {
+   "case_type": "REZ",
+   "n": 5064
+  },
+  {
+   "case_type": "SUP",
+   "n": 3291
+  },
+  {
+   "case_type": "RZC",
+   "n": 851
+  },
+  {
+   "case_type": "RZR",
+   "n": 772
+  },
+  {
+   "case_type": "RZM",
+   "n": 571
+  },
+  {
+   "case_type": "CIC",
+   "n": 551
+  },
+  {
+   "case_type": "MIH",
+   "n": 354
+  },
+  {
+   "case_type": "CRZ",
+   "n": 145
+  },
+  {
+   "case_type": "BRD",
+   "n": 111
+  },
+  {
+   "case_type": "TA",
+   "n": 34
+  },
+  {
+   "case_type": "SU",
+   "n": 28
+  },
+  {
+   "case_type": "Z",
+   "n": 22
+  }
+ ],
+ "by_decade": [
+  {
+   "decade": 1970,
+   "n": 1053
+  },
+  {
+   "decade": 1980,
+   "n": 2803
+  },
+  {
+   "decade": 1990,
+   "n": 2833
+  },
+  {
+   "decade": 2000,
+   "n": 2643
+  },
+  {
+   "decade": 2010,
+   "n": 1358
+  },
+  {
+   "decade": 2020,
+   "n": 1158
+  }
+ ],
+ "generated_from": "fixture"
+}

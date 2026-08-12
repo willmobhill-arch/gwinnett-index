@@ -1,0 +1,84 @@
+name: site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly: catches a live site that started 403ing AI crawlers without any
+    # code change on our side. Bot Fight Mode can be flipped on by a dashboard
+    # setting, and nothing in this repo would show it.
+    - cron: '17 6 * * 1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: site/package-lock.json }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Export snapshot from Supabase
+        if: ${{ env.DATABASE_URL != '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pip install 'psycopg[binary]'
+          python3 scripts/export_snapshot.py
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      - name: Build and verify
+        working-directory: site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: npm run ci
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: site/dist
+          retention-days: 7
+
+  agent-access:
+    # The check everyone forgets. Cloudflare Bot Fight Mode silently 403s AI
+    # crawlers regardless of robots.txt, and every page still looks perfect in a
+    # browser while it happens -- which would defeat the entire premise of this
+    # index without leaving a trace anywhere a human would look.
+    runs-on: ubuntu-latest
+    if: ${{ vars.SITE_URL != '' }}
+    steps:
+      - name: Assert 200 for AI crawler user-agents
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          set -u
+          fail=0
+          check() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -A "$2" --max-time 30 "$SITE_URL$3" || echo 000)
+            if [ "$code" = "200" ]; then
+              printf '  ok    %-18s %-28s %s\n' "$1" "$3" "$code"
+            else
+              printf '  FAIL  %-18s %-28s %s\n' "$1" "$3" "$code"
+              fail=1
+            fi
+          }
+          check GPTBot        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot" /j/duluth
+          check ClaudeBot     "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)" /j/duluth
+          check PerplexityBot "Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)" /j/duluth
+          check CCBot         "CCBot/2.0 (https://commoncrawl.org/faq/)" /j/unincorporated-gwinnett
+          check GPTBot-md     "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot" /j/duluth.md
+          check GPTBot-llms   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot" /llms.txt
+          check plain-browser "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36" /j/duluth
+          if [ "$fail" = "1" ]; then
+            echo
+            echo "An AI crawler user-agent did not get a 200."
+            echo "Check Cloudflare: Security > Bots > Bot Fight Mode must be OFF for content paths."
+            echo "robots.txt has no bearing on this — the 403 happens before robots.txt is consulted."
+            exit 1
+          fi

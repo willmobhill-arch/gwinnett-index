@@ -1,0 +1,77 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Governing from '../../../components/Governing.astro';
+import { codeSections, codeTables, jurisdictions, bySlug } from '../../../lib/source';
+import { num, codeSlug } from '../../../lib/format';
+
+export function getStaticPaths() {
+  const withCode = new Set([...codeSections(), ...codeTables()].map((x) => x.jurisdiction));
+  return jurisdictions().filter((j) => withCode.has(j.slug)).map((j) => ({ params: { jurisdiction: j.slug } }));
+}
+const { jurisdiction } = Astro.params;
+const j = bySlug(jurisdiction!)!;
+const secs = codeSections().filter((s) => s.jurisdiction === j.slug);
+const tabs = codeTables().filter((t) => t.jurisdiction === j.slug);
+
+const byArticle = new Map<string, typeof secs>();
+for (const s of secs) {
+  const k = s.article ?? '—';
+  if (!byArticle.has(k)) byArticle.set(k, []);
+  byArticle.get(k)!.push(s);
+}
+const adopted = secs[0]?.adopted_date, amended = secs[0]?.amended_through;
+---
+<Base title={`${j.name} code`} description={`${j.code_citation ?? 'Development code'} for ${j.name}.`}
+      twin={`/code/${j.slug}.md`}>
+  <h1>{j.code_citation ?? `${j.name} development code`}</h1>
+  <Governing j={j} />
+
+  <dl class="facts">
+    <dt>Sections indexed</dt><dd>{num(secs.length)}</dd>
+    <dt>Tables extracted</dt><dd>{num(tabs.length)}</dd>
+    <dt>Adopted</dt><dd>{adopted ?? '—'}</dd>
+    <dt>Amended through</dt><dd>{amended ?? '—'}</dd>
+    <dt>Source</dt><dd>{secs[0]?.source_url ? <a href={secs[0].source_url}>Adopted PDF</a> : '—'}</dd>
+  </dl>
+
+  <div class="flag">
+    <p>
+      Ordinance text is mirrored in full — an edict of government carries no copyright
+      (<em>Georgia v. Public.Resource.Org</em>, 2020). The adoption and amendment dates are
+      encoded in the source filename, which is also the change-detection signal: when the
+      city amends the code, the filename changes.
+    </p>
+  </div>
+
+  {tabs.length > 0 && (
+    <>
+      <h2>Tables</h2>
+      <ul class="plain">
+        {tabs.map((t) => (
+          <li>
+            <a href={`/code/${j.slug}/${codeSlug(t.citation)}`}>{t.citation}</a>{' '}
+            <span class="sub">{t.title}
+              {t.quality === 'verified'
+                ? ' — verified against the rendered page'
+                : ' — extracted, never checked against the source page'}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  )}
+
+  <h2>Sections</h2>
+  {[...byArticle.entries()].map(([art, list]) => (
+    <>
+      <h3>Article {art}{list[0]?.article_title ? ` — ${list[0].article_title}` : ''}</h3>
+      <ul class="plain">
+        {list.map((s) => (
+          <li>
+            <a href={`/code/${j.slug}/${codeSlug(s.citation)}`}>{s.citation}</a>{' '}
+            <span class="sub">{s.title}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  ))}
+</Base>

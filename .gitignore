@@ -6,3 +6,11 @@ __pycache__/
 node_modules/
 .agents/
 skills-lock.json
+
+# Derived: written by scripts/export_snapshot.py, rebuilt on every deploy.
+# The corpus has no business in git history; site/fixtures/ is the committed sample.
+data/snapshot/
+
+# Astro
+site/dist/
+site/.astro/

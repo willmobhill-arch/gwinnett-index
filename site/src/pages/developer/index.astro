@@ -1,0 +1,49 @@
+---
+import Base from '../../layouts/Base.astro';
+import { developers, stats } from '../../lib/source';
+import { num } from '../../lib/format';
+import { devSlug } from '../../lib/source';
+
+const ds = [...developers()].sort((a, b) => b.total_cases - a.total_cases);
+const s = stats();
+---
+<Base title="Developers" description="Private-sector applicant activity in unincorporated Gwinnett County, 1970–2026."
+      twin="/developer.md">
+  <h1>Developers</h1>
+  <p class="lede">
+    Who has been building in unincorporated Gwinnett, across {s.first_year}–{s.last_year}.
+  </p>
+  <p>
+    The county publishes applicants as free text in a 50-character field, so
+    {' '}{num(s.applicant_variants)} raw spellings were resolved down to {num(s.applicants)} entities.
+    Government applicants and law firms are excluded from this leaderboard: filings routinely read
+    <code>PARAN HOMES, LLC C/O MAHAFFEY PICKENS TUCKER, LLP</code>, and counting the second half
+    would put a land-use firm at the top of a developer ranking.
+  </p>
+  <div class="flag">
+    <p>
+      <strong>{num(s.merge_pending)} name pairs are still queued for human review</strong> rather
+      than merged on a similarity score. “CKK DEVELOPMENT SERVICES” and “SCI DEVELOPMENT SERVICES”
+      score 0.75 similar on a shared industry phrase and are unrelated companies. A split entity is
+      visibly incomplete; a wrongly merged one looks authoritative and is invisible. Counts below
+      are therefore lower bounds.
+    </p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Applicant</th><th>Cases</th><th>Since 2020</th><th>Years</th><th>Res units</th><th>Acres</th></tr></thead>
+      <tbody>
+        {ds.map((d) => (
+          <tr>
+            <td><a href={`/developer/${devSlug(d.norm_name)}`}>{d.display_name}</a></td>
+            <td>{num(d.total_cases)}</td>
+            <td>{num(d.cases_since_2020)}</td>
+            <td>{d.first_year}–{d.last_year}</td>
+            <td>{num(d.res_units)}</td>
+            <td>{num(d.acres)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</Base>

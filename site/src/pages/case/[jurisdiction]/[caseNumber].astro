@@ -1,0 +1,86 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Governing from '../../../components/Governing.astro';
+import { cases, bySlug } from '../../../lib/source';
+import { num, acres, date, zone, rawCode, isMined } from '../../../lib/format';
+import { abs } from '../../../lib/site';
+
+export function getStaticPaths() {
+  return cases().map((c) => ({
+    params: { jurisdiction: c.jurisdiction, caseNumber: c.case_number },
+    props: { c },
+  }));
+}
+const { c } = Astro.props;
+const j = bySlug(c.jurisdiction)!;
+const mined = isMined(c);
+
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'GovernmentService',
+  name: `${c.case_number} — ${c.proposed_use ?? c.request_text ?? 'land-use case'}`,
+  serviceType: c.case_type ?? 'land use case',
+  provider: { '@type': 'GovernmentOrganization', name: j.name },
+  areaServed: { '@type': 'AdministrativeArea', name: `${j.name}, Georgia` },
+  url: abs(`/case/${c.jurisdiction}/${encodeURIComponent(c.case_number)}`),
+  sameAs: c.source_url ?? undefined,
+};
+---
+<Base title={c.case_number}
+      description={`${c.case_type ?? 'Case'} ${c.case_number} in ${j.name}: ${c.proposed_use ?? c.request_text ?? ''}`.trim()}
+      twin={`/case/${c.jurisdiction}/${encodeURIComponent(c.case_number)}.md`} jsonld={jsonld}>
+  <h1>{c.case_number}</h1>
+  <p class="lede">{c.proposed_use ?? c.request_text ?? 'Land-use case'}</p>
+  <Governing j={j} />
+
+  {mined && (
+    <div class="flag">
+      <p>
+        <strong>Derived from a meeting document, not a case tracker.</strong> The City of Duluth
+        publishes no structured case database, so this record was extracted from the agenda or
+        minutes PDF linked below by <code>{c.extraction_method ?? 'pattern matching'}</code>.
+        Individual fields — applicant, address, request — are frequently mangled or truncated
+        by that extraction. Treat the linked PDF as the record and this row as an index entry
+        pointing at it.
+      </p>
+    </div>
+  )}
+
+  <h2>Record</h2>
+  <dl class="facts">
+    <dt>Case type</dt><dd>{c.case_type ?? '—'}</dd>
+    <dt>Year</dt><dd>{c.year ?? '—'}</dd>
+    <dt>Applicant</dt><dd>{c.applicant_raw ?? '—'}</dd>
+    <dt>Location</dt><dd>{c.location_text ?? '—'}</dd>
+    {c.pins && c.pins.length > 0 && (<><dt>Parcel PINs</dt><dd class="mono">{c.pins.join(', ')}</dd></>)}
+    <dt>Existing zoning</dt><dd>{zone(c.existing_zone)}</dd>
+    <dt>Proposed zoning</dt><dd>{zone(c.proposed_zone)}</dd>
+    <dt>Approved zoning</dt><dd>{zone(c.approved_zone)}</dd>
+    <dt>Acres</dt><dd>{acres(c.acres)}</dd>
+    <dt>Residential units</dt><dd>{c.res_units ? num(c.res_units) : '—'}</dd>
+    <dt>Non-residential sq ft</dt><dd>{c.nonres_sqft ? num(c.nonres_sqft) : '—'}</dd>
+  </dl>
+
+  <h2>Process</h2>
+  <dl class="facts">
+    <dt>Staff recommendation</dt><dd>{rawCode(c.staff_rec)}</dd>
+    <dt>Planning Commission</dt><dd>{rawCode(c.pc_rec)}{c.pc_date ? ` — ${date(c.pc_date)}` : ''}</dd>
+    <dt>Decision</dt><dd>{rawCode(c.decision)}{c.decision_date ? ` — ${date(c.decision_date)}` : ''}</dd>
+    <dt>Status</dt><dd>{rawCode(c.status)}</dd>
+    {c.hearing_body && (<><dt>Heard by</dt><dd>{c.hearing_body}</dd></>)}
+    {c.voted_for && (<><dt>Voted for</dt><dd>{c.voted_for}</dd></>)}
+    {c.voted_against && (<><dt>Voted against</dt><dd>{c.voted_against}</dd></>)}
+  </dl>
+  <p class="sub">
+    Decision and recommendation values are reproduced exactly as published. The source layer
+    ships no data dictionary for these codes, so this index does not expand them — open the
+    source record for the authoritative wording.
+  </p>
+
+  <h2>Provenance</h2>
+  <dl class="facts">
+    <dt>Source</dt>
+    <dd>{c.source_url ? <a href={c.source_url}>{c.source_system}</a> : c.source_system}</dd>
+    <dt>Last verified</dt><dd>{date(c.last_verified)}</dd>
+  </dl>
+</Base>
