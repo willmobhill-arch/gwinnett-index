@@ -156,3 +156,85 @@ class TestWorkerErrors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestCrawlerNaming(unittest.TestCase):
+    """crawl_duluth.py does not save PDFs under their published filenames -- those
+    collide and contain spaces. It writes <body_slug>_<sha1(url)[:16]>.pdf. Looking
+    for the source filename or the sha256 finds nothing, which would have sent
+    anyone using --pdf-dir straight back to an empty queue."""
+
+    ROW = {"sha256": "a", "quality": "scanned_no_text",
+           "filename": "3-10-25 M&C SIGNED MINS.pdf",
+           "url": "https://www.duluthga.net/3-10-25%20M&C%20SIGNED%20MINS.pdf",
+           "body_slug": "duluth-city-council"}
+
+    def test_name_matches_what_the_crawler_writes(self):
+        import hashlib
+        key = hashlib.sha1(self.ROW["url"].encode()).hexdigest()[:16]
+        self.assertEqual(ocr.crawl_filename(self.ROW),
+                         f"duluth-city-council_{key}.pdf")
+
+    def test_pdf_dir_lookup_finds_the_crawler_name(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / ocr.crawl_filename(self.ROW)).write_bytes(b"%PDF-1.4")
+            jobs, missing, _ = ocr.build_queue([self.ROW], d)
+            self.assertEqual(len(jobs), 1, "must find the crawler's naming scheme")
+            self.assertEqual(missing, [])
+
+
+class TestPublish(unittest.TestCase):
+    """The publish step did not exist, which is why 12.5 M characters of extracted
+    meeting text never reached the database."""
+
+    def setUp(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "ingest" / "duluth_agendas"))
+        import publish
+        self.publish = publish
+
+    def _src(self, td, rows):
+        p = Path(td) / "src.jsonl"
+        p.write_text("\n".join(__import__("json").dumps(r) for r in rows))
+        return p
+
+    def test_local_path_is_stripped(self):
+        import tempfile
+        rows = [{"url": "https://x/a.pdf", "local_path": "/Users/someone/raw/a.pdf",
+                 "text": "hello", "text_source": "embedded"}]
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "out.jsonl"
+            self.publish.publish_docs(self._src(td, rows), dest, with_text=True)
+            written = __import__("json").loads(dest.read_text())
+            self.assertNotIn("local_path", written)
+            self.assertEqual(written["url"], "https://x/a.pdf", "urls are not paths")
+
+    def test_text_is_kept_because_that_is_the_point(self):
+        import tempfile, json as J
+        rows = [{"url": "https://x/a.pdf", "text": "publisher text",
+                 "text_ocr": "recovered text", "text_source": "mixed"}]
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "out.jsonl"
+            st = self.publish.publish_docs(self._src(td, rows), dest, with_text=True)
+            w = J.loads(dest.read_text())
+            self.assertEqual(w["text"], "publisher text")
+            self.assertEqual(w["text_ocr"], "recovered text")
+            self.assertEqual(st["chars"], len("publisher text") + len("recovered text"))
+            self.assertEqual(st["sources"]["mixed"], 1)
+
+    def test_no_text_mode_drops_it(self):
+        import tempfile, json as J
+        rows = [{"url": "https://x/a.pdf", "text": "t", "text_source": "embedded"}]
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "out.jsonl"
+            self.publish.publish_docs(self._src(td, rows), dest, with_text=False)
+            self.assertNotIn("text", J.loads(dest.read_text()))
+
+    def test_a_leaked_absolute_path_aborts_the_publish(self):
+        import tempfile
+        rows = [{"url": "https://x/a.pdf", "stray": "/home/me/secret/a.pdf"}]
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(SystemExit):
+                self.publish.publish_docs(self._src(td, rows), Path(td) / "o.jsonl", True)

@@ -39,13 +39,17 @@ so an interrupted run picks up where it stopped instead of starting over. That
 matters for a job measured in hours on someone's laptop.
 
 Usage:
-    python3 ingest/duluth_agendas/ocr_scanned.py --pdf-dir raw/duluth_agendas
-    python3 ingest/duluth_agendas/ocr_scanned.py --pdf-dir raw/... --jobs 8 --limit 5
+    python3 ingest/duluth_agendas/ocr_scanned.py --jobs 8
+    python3 ingest/duluth_agendas/ocr_scanned.py --pdf-dir ingest/duluth_agendas/raw --limit 5
+
+The PDFs come from crawl_duluth.py, which writes them to ingest/duluth_agendas/raw/
+and records local_path on every row, so --pdf-dir is only needed if you moved them.
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
 import os
 import re
@@ -155,13 +159,29 @@ def _worker(job: tuple[str, str, int | None]) -> dict:
     return out
 
 
+def crawl_filename(row: dict) -> str | None:
+    """The name crawl_duluth.py actually writes.
+
+    Not the source filename and not the sha256: it is
+    <body_slug>_<sha1(url)[:16]>.pdf, because the published filenames collide and
+    contain spaces. Reproduced here rather than imported so this script can run
+    against a directory of PDFs without the crawler's state.
+    """
+    url, slug = row.get("url"), row.get("body_slug")
+    if not url or not slug:
+        return None
+    return f"{slug}_{hashlib.sha1(url.encode()).hexdigest()[:16]}.pdf"
+
+
 def resolve_pdf(row: dict, pdf_dir: Path | None) -> Path | None:
-    """Find the local PDF for a row. local_path first, then <pdf-dir>/<filename>."""
+    """Find the local PDF for a row: local_path, then several names in --pdf-dir."""
     lp = row.get("local_path")
     if lp and Path(lp).exists():
         return Path(lp)
     if pdf_dir:
-        for cand in (row.get("filename"), (row.get("sha256") or "") + ".pdf"):
+        for cand in (crawl_filename(row),
+                     row.get("filename"),
+                     (row.get("sha256") or "") + ".pdf"):
             if cand and (pdf_dir / cand).exists():
                 return pdf_dir / cand
     return None
