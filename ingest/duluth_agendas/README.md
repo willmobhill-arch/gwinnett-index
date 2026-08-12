@@ -24,8 +24,10 @@ layer at all**, and minutes are where decisions and vote records live — only 5
 109 Duluth cases currently carry an outcome.
 
 ```bash
-brew install tesseract                 # or: apt-get install tesseract-ocr
-pip install pymupdf httpx
+# In a Claude Code web container, this one line does the whole install
+# (verified: tesseract 5.3.4 + pymupdf 1.28.2). Locally, use brew/apt directly.
+bash scripts/setup_ocr_env.sh
+# equivalently: apt-get install -y tesseract-ocr && pip install pymupdf httpx
 
 cd ingest/duluth_agendas
 python3 crawl_duluth.py                # 356 PDFs -> ./raw/ (~10 min, skips cached)
