@@ -1,0 +1,8 @@
+.data/
+raw/
+*.pdf
+__pycache__/
+.env
+node_modules/
+.agents/
+skills-lock.json
