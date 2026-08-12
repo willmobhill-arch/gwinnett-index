@@ -1,0 +1,17 @@
+name = "gwinnett-index"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# SUPABASE_URL and SUPABASE_ANON_KEY are plain vars, not secrets: the anon key is
+# a publishable key and the whole API is public, read-only and unauthenticated by
+# design. That is only safe if RLS is on with SELECT-only policies — see
+# db/migrations/20260812170000_public_read_only_rls.sql. Without those policies the
+# anon key can WRITE to every table.
+[vars]
+SUPABASE_URL = "https://losmnziukaqptxhqnhjh.supabase.co"
+
+# Set with: wrangler secret put SUPABASE_ANON_KEY
+# (kept out of the repo even though it is publishable, so rotation is one place)
+
+[observability]
+enabled = true
