@@ -110,7 +110,15 @@ def tesseract(png: bytes) -> str:
     return r.stdout.decode("utf-8", "replace")
 
 
+# Postgres text cannot hold U+0000, and a single one aborts the entire corpus
+# load. Strip it here too even though the instances found so far came from the
+# publisher's text layer rather than from OCR -- tesseract on a noisy scan is
+# exactly the kind of thing that would produce more.
+RE_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def clean(txt: str) -> str:
+    txt = RE_CONTROL.sub(" ", txt)
     txt = re.sub(r"[ \t]+", " ", txt)
     return re.sub(r"\n{3,}", "\n\n", txt).strip()
 

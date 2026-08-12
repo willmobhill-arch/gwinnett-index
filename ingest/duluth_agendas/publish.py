@@ -27,8 +27,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+# Control characters that must never reach the database.
+#
+# Postgres text cannot hold U+0000 at all -- load_meeting_docs_from_url() aborts
+# the whole 356-document load with "unsupported Unicode escape sequence" on the
+# first one. The rest (0x01-0x1F except tab/LF/CR) are storable but are extraction
+# noise, not content.
+#
+# These come from the PUBLISHER'S OWN text layer, not from OCR: seven agenda
+# binders carry 60,113 of them between them, all in pymupdf-extracted `text`. A
+# PDF with a damaged font encoding produces them silently and the page still looks
+# perfect in a reader.
+RE_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def sanitise(v):
+    return RE_CONTROL.sub(" ", v) if isinstance(v, str) else v
 
 HERE = Path(__file__).parent
 REPO = HERE.parent.parent
@@ -50,10 +68,21 @@ def size(n: int) -> str:
 def publish_docs(src: Path, dest: Path, with_text: bool) -> dict:
     rows = [json.loads(l) for l in src.open(encoding="utf-8") if l.strip()]
     out = []
+    stripped = 0
     for r in rows:
-        clean = {k: v for k, v in r.items()
-                 if k not in STRIP and (with_text or k not in TEXT_FIELDS)}
+        clean = {}
+        for k, v in r.items():
+            if k in STRIP or (not with_text and k in TEXT_FIELDS):
+                continue
+            if isinstance(v, str):
+                n = len(RE_CONTROL.findall(v))
+                if n:
+                    stripped += n
+                    v = sanitise(v)
+            clean[k] = v
         out.append(clean)
+    if stripped:
+        print(f"    stripped {stripped:,} control characters that Postgres cannot store")
 
     # A published record that still carries someone's home directory is a bug we
     # would only notice by reading the file, so check rather than trust.
@@ -62,6 +91,13 @@ def publish_docs(src: Path, dest: Path, with_text: bool) -> dict:
                      for k, v in r.items() if k != "url")]
     if leaked:
         sys.exit(f"refusing to publish: {len(leaked)} rows still carry a local filesystem path")
+
+    # Gate, not just a cleanup: verify nothing survived, because a single U+0000
+    # aborts the entire database load and the file looks completely fine locally.
+    residue = sum(len(RE_CONTROL.findall(v))
+                  for r in out for v in r.values() if isinstance(v, str))
+    if residue:
+        sys.exit(f"refusing to publish: {residue} control characters remain")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("w", encoding="utf-8") as fh:
