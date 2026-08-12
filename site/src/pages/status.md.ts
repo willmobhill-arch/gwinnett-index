@@ -7,6 +7,7 @@ export const GET: APIRoute = () => {
   const s = stats();
   const js = jurisdictions();
   const r = s.resolver ?? {};
+  const dx = s.duluth_extraction;
   const probes = Object.values(r).reduce((a, b) => a + b.probes, 0);
   const correct = Object.values(r).reduce((a, b) => a + b.correct, 0);
 
@@ -63,8 +64,13 @@ ${table(['Metric', 'Value'], [
 - **${s.merge_pending} applicant name pairs await human review**, so developer case counts are lower bounds.
 - **Duluth minutes are 57–69% scanned** with no text layer. OCR text is stored separately and
   marked as a reconstruction, never as a quotation of the record. The OCR pass is incomplete.
-- **Duluth case fields are agenda-mined, not database-sourced.** The city runs no case tracker;
-  applicant and address fields are frequently mangled by the extraction.
+- **Duluth case fields are agenda-mined, not database-sourced.** The city runs no case tracker,
+  so these rows are pattern-matched out of agenda and minutes PDFs. Field-level quality is poor,
+  measured across all ${dx?.cases ?? 0}: ${dx?.location_without_street_number ?? 0} have a "location" with no street number
+  (${dx?.location_is_junk ?? 0} are plainly not addresses at all), ${dx?.request_is_boilerplate ?? 0} have a "request" that is just
+  the word ORDINANCE, ${dx?.applicant_overran ?? 0} have an applicant field that ran on into a mailing address, and
+  only ${dx?.with_zoning ?? 0} carry a zoning district. Treat each as an index entry pointing at a PDF, not as
+  a structured record: the linked document is the authority, the fields are a finding aid.
 - **16 municipalities have boundaries but no corpus.** They resolve correctly; there is no code
   or case data behind them yet.
 - **Meeting body text is not published here** (12.5 M characters); only document metadata is indexed.

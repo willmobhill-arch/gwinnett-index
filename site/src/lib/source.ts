@@ -108,6 +108,12 @@ export interface Stats {
   code_tables_verified: number; meeting_docs: number; meeting_pages: number; probes: number;
   resolver: Record<string, { probes: number; correct: number }>;
   case_types: { case_type: string; n: number }[];
+  /** How often agenda mining produced a field that is plainly not what it claims to be. */
+  duluth_extraction?: {
+    cases: number; with_outcome: number; with_zoning: number;
+    location_without_street_number: number; location_is_junk: number;
+    applicant_missing: number; applicant_overran: number; request_is_boilerplate: number;
+  };
   by_decade: { decade: number; n: number }[];
   generated_from?: string; generated_at?: string;
 }

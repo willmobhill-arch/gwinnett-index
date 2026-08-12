@@ -114,7 +114,24 @@ SELECT json_build_object(
   'case_types',    (SELECT json_agg(t) FROM (SELECT case_type, count(*) n FROM land_use_case
                      WHERE case_type IS NOT NULL GROUP BY 1 ORDER BY 2 DESC LIMIT 12) t),
   'by_decade',     (SELECT json_agg(t) FROM (SELECT (year/10)*10 AS decade, count(*) n
-                     FROM land_use_case WHERE year IS NOT NULL GROUP BY 1 ORDER BY 1) t)
+                     FROM land_use_case WHERE year IS NOT NULL GROUP BY 1 ORDER BY 1) t),
+  -- Agenda mining is not a database read. Measuring how often it produced a
+  -- field that is obviously not what it claims to be is the only way anyone
+  -- downstream can tell how far to trust these rows -- and the only way we
+  -- notice if a parser change makes it worse.
+  'duluth_extraction', (SELECT json_build_object(
+      'cases',        count(*),
+      'with_outcome', count(*) FILTER (WHERE decision IS NOT NULL),
+      'with_zoning',  count(*) FILTER (WHERE existing_zone IS NOT NULL),
+      'location_without_street_number',
+                      count(*) FILTER (WHERE location_text IS NULL OR location_text !~ '[0-9]'),
+      'location_is_junk',
+                      count(*) FILTER (WHERE location_text ~* '^(as presented|\{|approved|the |a )'),
+      'applicant_missing', count(*) FILTER (WHERE applicant_raw IS NULL),
+      'applicant_overran', count(*) FILTER (WHERE length(applicant_raw) > 40),
+      'request_is_boilerplate',
+                      count(*) FILTER (WHERE upper(request_text) IN ('ORDINANCE','ORDINANCE OF REZONING')))
+    FROM land_use_case WHERE source_system = 'duluth-agenda-mining')
 ) AS j
 """
 

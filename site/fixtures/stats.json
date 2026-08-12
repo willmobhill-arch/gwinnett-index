@@ -107,5 +107,15 @@
    "n": 1158
   }
  ],
- "generated_from": "fixture"
+ "generated_from": "fixture",
+ "duluth_extraction": {
+  "cases": 109,
+  "with_outcome": 54,
+  "with_zoning": 13,
+  "location_without_street_number": 67,
+  "location_is_junk": 17,
+  "applicant_missing": 10,
+  "applicant_overran": 23,
+  "request_is_boilerplate": 57
+ }
 }

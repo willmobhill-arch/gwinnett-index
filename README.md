@@ -68,10 +68,36 @@ county load moves zero bytes through a client.
 ingest/
   duluth/          UDC PDF -> 860 sections + 18 tables (extract_udc, extract_tables)
   duluth_agendas/  crawl -> OCR -> parse case items from agendas/minutes/packets
-scripts/           standalone loaders for environments with direct PG access
+db/migrations/     the schema, md5-verified against the live Supabase project
+scripts/           export_snapshot.py (the only thing that talks to Postgres) + loaders
 data/              extracted corpora, fetched by the SQL loaders above
+site/              Astro static site + full agent surface (.md twins, llms.txt, DCAT)
+worker/            Cloudflare Worker: REST API + MCP server, five tools, no auth
 docs/plans/        design doc, build plan, status
 ```
+
+### Building the site
+
+```bash
+DATABASE_URL=postgresql://... python3 scripts/export_snapshot.py   # writes data/snapshot/
+cd site && npm ci && SITE_URL=https://your-domain npm run ci        # build + 15 gates
+```
+
+Without a snapshot the site builds from `site/fixtures/` — a small committed sample with
+identical shapes — and says so on every page. `npm run ci` fails the build if any route
+lacks a `.md` twin, any page presents records before naming its governing jurisdiction,
+or the bulk export contains geometry.
+
+### The API and MCP server
+
+```bash
+cd worker && npm ci && npm test        # 10 protocol tests, no network
+wrangler secret put SUPABASE_ANON_KEY && wrangler deploy
+```
+
+Five tools, public, read-only, no auth: `resolve_jurisdiction` (always call first),
+`search_cases`, `get_case`, `get_code_section`, `list_jurisdictions`. The REST API mirrors
+the same five operations from the same implementation and publishes `/openapi.json`.
 
 ### The adapter pattern
 
@@ -95,6 +121,11 @@ adapter layer is leaking.**
 - **Duluth minutes**: 57–69% are scanned with no text layer (printed, signed,
   re-scanned). OCR text is stored separately with `text_source='ocr'` and is a
   reconstruction, never a quotation of the record.
+- **Duluth's 109 cases are a finding aid, not a dataset.** Measured field by field:
+  67 have a "location" containing no street number, 57 have a "request" that is just the
+  word `ORDINANCE`, 23 have an applicant field that ran on into a mailing address, and
+  only 13 carry a zoning district. Each row links to the PDF it came from; **the document
+  is the record and the fields point at it.** Published as `stats.duluth_extraction`.
 - **Applicant resolution**: 271 variants merged on tight edit distance; **262
   lower-confidence pairs are queued for human review rather than merged on a
   guess.** A split entity is visibly wrong; a wrongly merged one looks

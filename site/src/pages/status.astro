@@ -10,6 +10,7 @@ const totalProbes = Object.values(r).reduce((a, b) => a + b.probes, 0);
 const totalCorrect = Object.values(r).reduce((a, b) => a + b.correct, 0);
 const withCode = js.filter((j) => j.code_sections > 0).length;
 const withCases = js.filter((j) => j.cases > 0).length;
+const dx = s.duluth_extraction;
 ---
 <Base title="Status and freshness"
       description="What is loaded, what is verified, and what is knowingly missing."
@@ -86,8 +87,20 @@ const withCases = js.filter((j) => j.cases > 0).length;
     </li>
     <li>
       <strong>Duluth case fields are agenda-mined, not database-sourced.</strong> The city runs no
-      case tracker. Applicant and address fields in those records are frequently mangled by the
-      extraction; each one links to the PDF it came from.
+      case tracker, so these rows come out of agenda and minutes PDFs by pattern matching, and
+      the field-level quality is poor. Measured across all {num(dx?.cases)} of them:
+      <ul>
+        <li>{num(dx?.location_without_street_number)} have a “location” containing no street
+          number at all, {num(dx?.location_is_junk)} of which are plainly not addresses
+          (<code>as presented.</code>, <code>&#123;J&#125;</code>)</li>
+        <li>{num(dx?.request_is_boilerplate)} have a “request” that is just the word
+          <code>ORDINANCE</code></li>
+        <li>{num(dx?.applicant_overran)} have an applicant field that ran on into the applicant's
+          mailing address, and {num(dx?.applicant_missing)} have none</li>
+        <li>only {num(dx?.with_zoning)} carry a zoning district, and {num(dx?.with_outcome)} an outcome</li>
+      </ul>
+      Treat each of these as an <em>index entry pointing at a PDF</em>, not as a structured record.
+      The linked document is the authority; the extracted fields are a finding aid.
     </li>
     <li>
       <strong>16 municipalities have boundaries but no corpus.</strong> They resolve correctly —

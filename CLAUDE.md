@@ -1,0 +1,225 @@
+# CLAUDE.md — Gwinnett Index
+
+Read this before doing anything. It exists so decisions already made don't get
+re-litigated, and so the failure modes below don't get rediscovered the hard way.
+
+## What this is
+
+A machine-readable index of zoning, land-use, and development records for Gwinnett
+County, Georgia and its 17 municipalities. **Agents first, humans second.** Two goals:
+be the source AI assistants cite for Gwinnett land use (authority), and sell
+pipeline monitoring to developers, brokers, and land-use attorneys (commercial).
+
+## The core insight — everything hangs off this
+
+**A "Duluth, GA" mailing address is usually NOT in the City of Duluth.** It's in
+unincorporated Gwinnett: a different code, a different board, a different permit
+portal. Unincorporated is **67.3% of the county's land area**, so getting this
+wrong is the default case, not the edge case.
+
+Nothing on the internet resolves address → *governing* jurisdiction before
+answering a zoning question. That resolution is the product.
+
+**Rule:** every page, API response, and MCP result states its governing
+jurisdiction explicitly, before any substantive answer. On the site this is
+enforced by a build gate (`site/scripts/verify-build.mjs`), not by discipline.
+
+## Current state
+
+Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
+
+| Table | Rows |
+|---|---|
+| `jurisdiction` | 19 (county + unincorporated + 17 cities), PostGIS |
+| `land_use_case` | 11,848 — 11,739 county ArcGIS + 109 Duluth agenda-mined |
+| `applicant` | 7,369 resolved from 8,246 raw spellings |
+| `code_section` | 858 Duluth UDC sections |
+| `code_table` | 18 (only Table 2-B is `quality='verified'`) |
+| `meeting_document` | 353 |
+| `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
+
+Built: `db/migrations/` (all 17, md5-verified against the live project),
+`site/` (Astro, 9 route families, full agent surface), `worker/` (REST + MCP,
+5 tools, 10 protocol tests).
+
+Not done: **RLS is still off** (see below), no domain, nothing deployed.
+
+## Non-negotiables
+
+**Legal posture.** Mirror ordinance and plan text in full (*Georgia v.
+Public.Resource.Org*, 2020 — edicts of government). **Never rehost Gwinnett GIS
+parcel or zoning geometry** — their licence has an explicit no-redistribution
+clause; query it live and link out. Boundaries come from **US Census TIGER**
+(federal, public domain) — that's the only geometry we host. **Never index
+IBC/IRC base text** (ICC copyright, actively litigated); index Georgia's
+amendment packets, which are freely published, and cite ICC sections by number.
+
+The bulk export is gated on this: `verify-build.mjs` gunzips it and fails if any
+line carries `boundary`, `geometry`, `rings`, `wkt` or `coordinates`. A licence
+breach here would look completely fine on every page.
+
+**RLS is off and the API makes that urgent.** With RLS disabled, PostgREST
+exposes INSERT/UPDATE/DELETE on every `public` table to `anon` — and the anon key
+is publishable by design, so it lives in a Worker binding and in anyone's network
+tab. `db/migrations/20260812170000_public_read_only_rls.sql` fixes it and is
+**deliberately not applied**; it needs a human decision. Ingestion is unaffected
+because every loader runs inside Postgres as the owner.
+
+**County case layers are unincorporated-only.** Every record in `GC_Planning`
+layers 1/2/15 is a Board of Commissioners decision. City cases are NOT in there.
+Addresses reading "DULUTH HIGHWAY" are street names in unincorporated territory,
+not the City of Duluth. Never attribute these to a municipality.
+
+**Uncertainty gets flagged, never guessed.** This principle produced the
+resolver's confidence band, the applicant review queue, the table quality flags,
+and `stats.duluth_extraction`. A visible gap is recoverable; a confident wrong
+answer is not.
+
+**Don't expand codes the source doesn't define.** `APC`, `DEN`, `REC` and friends
+ship with no data dictionary anywhere in the county's GIS. The site and the API
+reproduce them verbatim and link to the record. Guessing at the meaning of a
+legal outcome and presenting the guess as fact is exactly the failure mode this
+project is built against.
+
+## Architecture decisions and why
+
+**Ingestion runs inside Postgres** via the `http` extension, fetching ArcGIS,
+Census TIGERweb, and the repo's own raw URLs. This started as a workaround —
+the Cowork sandbox blocked outbound Postgres — but it's genuinely good: no
+worker, no credentials in transit. **Locally you have a direct connection, so
+prefer psycopg for new work**; keep the in-database loaders for scheduled jobs.
+
+**The site builds from a snapshot, not from the database.** `scripts/export_snapshot.py`
+writes `data/snapshot/*.json` (gitignored); the site reads that. Deterministic,
+offline-capable, and *diffable* — for a legal-reference index, seeing exactly what
+changed between two deploys is worth more than build-time freshness.
+`site/fixtures/` is a small committed sample with identical shapes so the site
+builds with no database at all, and it says so loudly on every page when it does.
+
+**One implementation behind two surfaces.** `worker/src/tools.ts` holds all five
+operations; the REST router and the MCP server both call it. They cannot drift
+apart and answer the same question differently.
+
+**Five MCP tools, and adding a sixth needs an argument.** Every tool description
+is permanent context tax in every connected client, paid on every turn whether
+the tool is called or not.
+
+**Adapter pattern, not per-city scrapers.** 17 jurisdictions can't be 17
+hand-written scrapers. Vendors consolidate hard — Municode, ArcGIS REST,
+CivicPlus, CivicClerk, BS&A, Accela — so ~6 adapters cover ~90%, and adding a
+city is a config file. **Health metric: if a new city needs new *code* rather
+than a new *config*, the adapter layer is leaking. Fix it before adding more.**
+
+## Failure modes already hit — do not repeat
+
+These were all *silent*. Each was found by checking something that didn't add up,
+not by an error.
+
+- **`\b` in a date regex fails after a letter.** `DuluthAgendaBinder8-10-26.pdf` —
+  "r" and "8" are both word chars, so no boundary. Dropped the date on all 80
+  agenda binders. Use `(?<!\d)`.
+- **Section numbers are 3 digits in UDC Articles 1–9 and 4 digits from Article 10
+  on** (`1004.01`). Matching `\d{3}` silently dropped 298 subsections.
+- **Case-sensitivity and punctuation vary by body.** Planning Commission writes
+  `Case: TA2026-007,`; ZBA writes `Case V2026-001` (no colon); council packets
+  write `CASE Z2026-004` in caps. An early-exit guard on the literal `"Case:"`
+  skipped every packet — i.e. every decision.
+- **Always bound regex capture groups.** An unbounded `.+?` between `Case:` and
+  `Request:` ran across a whole staff report: one record came out at 777 KB with
+  67,553 chars in the `address` field.
+- **pdfplumber's per-row cell lists are not column-stable.** Lot size landed at
+  index 1 for RA-200 and index 2 for R-100. Derive columns from clustered
+  x-edges, and **rows from each table row's own bbox** — clustering y-edges
+  invents extra bands inside multi-line cells and bleeds values between rows.
+- **Classify on the principal, not the raw string.** `"PARAN HOMES, LLC C/O
+  MAHAFFEY PICKENS TUCKER, LLP"` classified as `law_firm`. Split on `C/O` first,
+  or the land-use firm looks like the county's biggest developer.
+- **Trigram similarity alone will false-merge.** "CKK DEVELOPMENT SERVICES" and
+  "SCI DEVELOPMENT SERVICES" score 0.75 on a shared industry phrase. Auto-merge
+  only on tight edit distance; queue the rest.
+- **`cmd && heredoc` swallows the heredoc when `cmd` fails.** A `cd x && cat > f`
+  chain silently skipped one migration file. Caught only because every file was
+  md5-checked against the database. Write files with absolute paths.
+- **Filtering `''` out of an array of markdown lines removes the blank lines.**
+  It glued every heading to the paragraph above it. Filter `null` and let `''`
+  mean what it says.
+- **Measure the claim before printing it.** The "11× token reduction" for `.md`
+  twins is really **5.7× on bytes** (median; 3.3–8.7 range). The build now prints
+  the measured ratio so the copy can't drift from what ships.
+- **Check the "other"/unclassified bucket.** Nearly every silent bug above was
+  found by looking at what failed to classify.
+- **A file size that doesn't add up is a bug signal.** 3.3 MB for 274 records of
+  capped text is how the 777 KB record surfaced.
+
+## Verification habits that paid off
+
+- **Verify against the rendered source, not internal consistency.** Table 2-B
+  looked right until I rendered page 52 as an image and compared cell by cell —
+  which is how the multi-line bleed showed up after I'd already called it verified.
+- **Write the gate before you look at the output.** Both markdown bugs above were
+  caught by checks written in advance, on output I'd have skimmed past.
+- **Diff the repo against the live schema, not against your memory of it.**
+  `code_table.quality` and `land_use_case.applicant_norm` existed only in
+  production; a rebuild from `db/migrations` alone produced a loader that errored
+  on first use.
+- **Keep a regression fixture.** `resolver_probe` scores the resolver against the
+  county's own zoning layers. Expected: `confidence='high'` → **100% correct**
+  (1,546/1,546). `export_snapshot.py` refuses to write a snapshot if it isn't:
+
+```sql
+SELECT coalesce(r.confidence,'unresolved') AS confidence, count(*) probes,
+       count(*) FILTER (WHERE r.slug = p.expected_slug) correct
+FROM resolver_probe p
+LEFT JOIN LATERAL resolve_jurisdiction(ST_X(p.pt), ST_Y(p.pt), 150) r ON true
+GROUP BY 1;
+```
+
+- **Provenance on every record.** `source_url` + `last_verified`, always. OCR text
+  lives in its own field with `text_source='ocr'` because it's a *reconstruction*,
+  never a quotation of the record.
+
+## Known gaps
+
+- **17 of 18 UDC tables are unverified.** Only Table 2-B has been checked against
+  the source page, and even its merged PUD/CBD rows are unreliable. Their cell
+  values are withheld from the published snapshot by design.
+- **262 applicant merge candidates await human review** in
+  `applicant_merge_candidate` (`decision='pending'`). Developer counts are lower
+  bounds.
+- **Duluth's 109 cases are a finding aid, not a dataset.** Measured: 67 have a
+  "location" with no street number (17 aren't addresses at all — `as presented.`,
+  `{J}`), 57 have a "request" that is just the word `ORDINANCE`, 23 have an
+  applicant field that ran on into a mailing address, only 13 carry a zoning
+  district. Published as `stats.duluth_extraction` and flagged on every affected
+  page. The linked PDF is the record; the fields point at it.
+- **Duluth minutes are 57–69% scanned** with no text layer. OCR pass exists
+  (`ingest/duluth_agendas/ocr_scanned.py`) but has never completed — re-run it
+  locally, then regenerate `duluth_cases.jsonl`. **This is the single highest-value
+  data task left**: it is what turns those 109 index entries into records.
+- **`developer_activity` includes engineering/planning consultants** (Carter
+  Engineering, Ridgeline Land Planning) that file as agents without a `C/O`
+  marker. The `kind` classifier can't catch that from the name alone — needs a
+  manual pass on the top 50.
+- **Meeting body text isn't loaded** (12.5 M chars). Only metadata is in
+  `meeting_document`.
+- **16 municipalities have boundaries but no corpus.** They resolve correctly.
+
+## Next phase
+
+1. **Apply the RLS migration.** One decision; the API is not safe to publish first.
+2. Register a domain, set `SITE_URL`, deploy `site/` to Cloudflare Pages and
+   `worker/` via `wrangler deploy` with `SUPABASE_ANON_KEY` as a secret.
+3. **Verify Cloudflare Bot Fight Mode is OFF.** CI already asserts a 200 for
+   GPTBot/ClaudeBot/PerplexityBot/CCBot against the live origin, on push and
+   weekly. It silently 403s AI crawlers regardless of robots.txt and would defeat
+   the entire premise while every page looks fine in a browser.
+4. List the MCP server in the registry as `org.<domain>/gwinnett-index`.
+5. Duluth OCR pass.
+6. Only then widen: Peachtree Corners and Norcross are mostly config.
+
+## Style
+
+Match the existing code: module docstrings explain *why* a non-obvious approach
+was chosen, comments mark the traps above. Don't add ceremony. When something is
+uncertain, say so in the data — a `quality` column, a confidence band, a review
+queue, a measured counter — rather than in a comment nobody reads.
