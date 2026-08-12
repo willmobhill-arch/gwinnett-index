@@ -2,7 +2,7 @@
  * Markdown twins.
  *
  * Every HTML route has a `.md` sibling carrying the same facts with the chrome
- * removed. Measured across this build the twins run about 5x smaller than the
+ * removed. Measured across this build the twins run about 4x smaller than the
  * HTML in bytes, and markdown tokenises more densely than markup, so the saving
  * an agent actually sees is larger than that. scripts/verify-build.mjs prints
  * the real ratio on every build rather than letting the claim drift.

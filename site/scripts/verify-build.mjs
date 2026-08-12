@@ -150,6 +150,48 @@ const glued = substantive.map((p) => `${p}.md`).filter((f) => /[^\n]\n#{1,3} /.t
 if (glued.length) fail.push(`${glued.length} twin(s) have headings with no blank line before them: ${glued.slice(0, 3).join(', ')}`);
 else ok.push('twin markdown is well-formed (headings separated)');
 
+// --------------------------------------------------- deploy-shape limits
+// Static hosts cap the number of files in a deployment, and this site emits two
+// per record -- an HTML page and its .md twin -- so the count scales with the
+// corpus and will cross the line long before anyone thinks to look. Finding that
+// out from a failed deploy, after a 33-second build and a 247 MB upload, is the
+// expensive way.
+//
+// Cloudflare Pages is documented at 20,000 files and 25 MiB per file. Confirm
+// against the current limits for whichever host is used and set MAX_FILES to
+// match; the point is that the build refuses to be surprised, not that this
+// particular number is eternal.
+const MAX_FILES = Number(process.env.MAX_DEPLOY_FILES ?? 20000);
+const MAX_FILE_BYTES = Number(process.env.MAX_DEPLOY_FILE_BYTES ?? 25 * 1024 * 1024);
+
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+  const p = path.join(dir, e.name);
+  return e.isDirectory() ? walk(p) : [p];
+});
+const files = walk(DIST);
+const sizes = files.map((f) => fs.statSync(f).size);
+const totalMb = sizes.reduce((a, b) => a + b, 0) / 1048576;
+const biggest = Math.max(...sizes);
+const biggestFile = files[sizes.indexOf(biggest)];
+
+if (files.length > MAX_FILES) {
+  fail.push(
+    `${files.length.toLocaleString()} files exceeds the ${MAX_FILES.toLocaleString()}-file ` +
+    `deploy limit. Two files per record (HTML + .md twin) means this grows with the corpus. ` +
+    `Options: serve .md twins from the Worker instead of statically (halves the count), ` +
+    `restrict which record families are prerendered, or deploy somewhere without the cap.`
+  );
+} else if (files.length > MAX_FILES * 0.85) {
+  warn.push(`${files.length.toLocaleString()} files is within 15% of the ${MAX_FILES.toLocaleString()} deploy limit`);
+} else {
+  ok.push(`${files.length.toLocaleString()} files, ${totalMb.toFixed(0)} MB (limit ${MAX_FILES.toLocaleString()})`);
+}
+if (biggest > MAX_FILE_BYTES) {
+  fail.push(`${path.relative(DIST, biggestFile)} is ${(biggest / 1048576).toFixed(1)} MB, over the per-file limit`);
+} else {
+  ok.push(`largest file ${(biggest / 1048576).toFixed(1)} MB (${path.relative(DIST, biggestFile)})`);
+}
+
 // ------------------------------------------------------------------ report
 for (const o of ok) console.log(`  ok    ${o}`);
 for (const w of warn) console.log(`  warn  ${w}`);
