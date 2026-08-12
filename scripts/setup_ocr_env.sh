@@ -26,18 +26,33 @@ python3 -c "import pymupdf, httpx; print(f'  pymupdf {pymupdf.__version__}, http
 echo "==> self-test (no network needed)"
 python3 -m unittest discover -s tests -q 2>&1 | tail -2
 
+echo "==> network reachability (the other half of the problem)"
+# Do not assert this -- measure it. The environment's policy can change between
+# sessions, and a stale claim in either direction sends the next person the wrong
+# way: chasing a firewall that is already open, or starting a 356-PDF crawl into
+# a closed gateway.
+blocked=0
+for h in www.duluthga.net losmnziukaqptxhqnhjh.supabase.co gis3.gwinnettcounty.com geocoding.geo.census.gov; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "https://$h/" 2>/dev/null || echo 000)
+  # any HTTP answer means the gateway let us through; 000 is a CONNECT refusal
+  if [ "$code" = "000" ]; then printf '  BLOCKED  %s\n' "$h"; blocked=1
+  else printf '  ok %-6s %s\n' "($code)" "$h"; fi
+done
+
+if [ "$blocked" = "1" ]; then
+  cat <<'MSG'
+
+At least one host is unreachable: the gateway is rejecting CONNECT for it.
+crawl_duluth.py cannot fetch the meeting PDFs until that changes. Fix it in the
+environment's network settings -- not by touching HTTPS_PROXY or TLS verification:
+https://code.claude.com/docs/en/claude-code-on-the-web
+MSG
+  exit 1
+fi
+
 cat <<'MSG'
 
-Dependencies are ready. The remaining blocker for the OCR pass is NETWORK:
-crawl_duluth.py must reach www.duluthga.net, which this environment's policy
-currently rejects at the gateway (CONNECT -> 403).
-
-Hosts the project needs egress to:
-  www.duluthga.net, duluthga.net        the meeting PDFs           (OCR pass)
-  losmnziukaqptxhqnhjh.supabase.co      snapshot export, PostgREST (site builds)
-  gis3.gwinnettcounty.com               county ArcGIS + geocoder   (case ingest)
-  geocoding.geo.census.gov              geocoder fallback          (worker tests)
-
-Change it in the environment's network settings:
-https://code.claude.com/docs/en/claude-code-on-the-web
+Ready. Run the pass from ingest/duluth_agendas:
+  python3 crawl_duluth.py && python3 extract_text.py \
+    && python3 ocr_scanned.py --jobs 8 && python3 parse_cases.py && python3 publish.py
 MSG

@@ -6,6 +6,7 @@ OCR what was scanned, then parse case-shaped items out of the result.
 
 ```
 crawl_duluth.py    index pages -> 356 PDFs into ./raw/, + duluth_meeting_docs.jsonl
+                   NOTE: downloads ONLY with --fetch; without it you get metadata
 extract_text.py    PDF text layer  -> duluth_meeting_text.jsonl
 ocr_scanned.py     the 91 scanned  -> duluth_meeting_text_ocr.jsonl
 parse_cases.py     case-shaped items -> duluth_cases.jsonl
@@ -30,7 +31,7 @@ bash scripts/setup_ocr_env.sh
 # equivalently: apt-get install -y tesseract-ocr && pip install pymupdf httpx
 
 cd ingest/duluth_agendas
-python3 crawl_duluth.py                # 356 PDFs -> ./raw/ (~10 min, skips cached)
+python3 crawl_duluth.py --fetch        # 356 PDFs -> ./raw/ (~10 min, skips cached)
 python3 extract_text.py
 python3 ocr_scanned.py --jobs 8        # the long one
 python3 parse_cases.py
@@ -98,6 +99,10 @@ as the record. Both are wrong, so the schema says what is actually true.
 - **Bound every capture group.** An unbounded `.+?` between `Case:` and `Request:`
   ran across a whole staff report and produced one record with 67,553 characters
   in its `address` field.
+- **`crawl_duluth.py` downloads nothing without `--fetch`.** The default run does
+  discovery, writes a metadata-only `duluth_meeting_docs.jsonl`, prints a cheerful
+  document count and exits 0. Every downstream script then finds no PDFs. Same
+  family as the bug below: the flag gates the side effect, not the exit code.
 - **A queue of zero is a bug, not a result.** The previous OCR script required
   `local_path` on every row, which nothing in the published corpus has. It printed
   `OCR queue: 0`, wrote an output file identical to its input, and exited 0. That
