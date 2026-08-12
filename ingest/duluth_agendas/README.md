@@ -43,7 +43,10 @@ records, so `--pdf-dir` is only needed if you moved them. Note the crawler saves
 files as `<body_slug>_<sha1(url)[:16]>.pdf`, not under their published names — those
 collide and contain spaces.
 
-The queue is **91 documents / 1,059 scanned pages** — roughly an hour
+The queue is **91 documents / 714 scanned pages**. (Those 91 documents contain
+1,059 pages in total; only 714 of them lack a text layer and need OCR. Quoting the
+document page count as the OCR workload overstates the job by 48% — the two numbers
+are not interchangeable.) — roughly an hour
 single-threaded, a few minutes across cores. It was never the size that stopped
 this finishing. Progress is checkpointed per document to
 `duluth_meeting_text_ocr.progress.jsonl`, so an interrupted run resumes rather

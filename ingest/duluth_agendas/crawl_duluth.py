@@ -151,6 +151,11 @@ def fetch_all(client: httpx.Client, docs: list[dict]) -> list[dict]:
         if dest.exists() and dest.stat().st_size > 0:
             d["bytes"] = dest.stat().st_size
             d["fetch_status"] = "cached"
+            # Hash the cached copy too. Skipping this leaves rows with no content
+            # fingerprint at all, which breaks change detection AND any downstream
+            # step that keys on sha256 -- a re-run over a warm cache silently
+            # produces a corpus that a fresh run would not.
+            d["sha256"] = hashlib.sha256(dest.read_bytes()).hexdigest()
             continue
         try:
             r = client.get(d["url"], timeout=120, follow_redirects=True)

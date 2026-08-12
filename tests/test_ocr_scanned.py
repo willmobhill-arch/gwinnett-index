@@ -238,3 +238,26 @@ class TestPublish(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaises(SystemExit):
                 self.publish.publish_docs(self._src(td, rows), Path(td) / "o.jsonl", True)
+
+
+class TestDocKey(unittest.TestCase):
+    """crawl_duluth.py used to skip hashing on a cache hit, so a warm re-run
+    produced rows with no sha256 and build_queue died with KeyError before OCRing
+    a single page. One malformed row must not abort a 91-document job."""
+
+    def test_sha256_is_preferred(self):
+        self.assertEqual(ocr.doc_key({"sha256": "abc", "url": "https://x/a.pdf"}), "abc")
+
+    def test_falls_back_to_url_when_unhashed(self):
+        self.assertEqual(ocr.doc_key({"url": "https://x/a.pdf"}), "https://x/a.pdf")
+
+    def test_queue_survives_a_row_with_no_sha256(self):
+        import tempfile
+        row = {"quality": "scanned_no_text", "url": "https://x/a.pdf",
+               "body_slug": "duluth-city-council", "filename": "a.pdf"}
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / ocr.crawl_filename(row)).write_bytes(b"%PDF-1.4")
+            jobs, missing, _ = ocr.build_queue([row], d)   # must not raise
+            self.assertEqual(len(jobs), 1)
+            self.assertEqual(jobs[0][0], "https://x/a.pdf")

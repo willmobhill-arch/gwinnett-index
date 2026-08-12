@@ -211,7 +211,7 @@ GROUP BY 1;
   138 minutes**. The OCR pass (`ingest/duluth_agendas/ocr_scanned.py`) is fixed and
   tested but **has still never been run**: this container has no tesseract and
   cannot reach duluthga.net. Run it locally, then regenerate `duluth_cases.jsonl`.
-  Queue is 91 documents / 1,059 pages — an hour single-threaded, minutes across
+  Queue is 91 documents / 714 scanned pages — an hour single-threaded, minutes across
   cores. **This is the single highest-value data task left**: it is what turns
   those 109 index entries into records with vote counts.
 - **`developer_activity` includes engineering/planning consultants** (Carter

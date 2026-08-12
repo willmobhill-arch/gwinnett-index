@@ -224,7 +224,7 @@ still 1,546/1,546.
 | **Register a domain** | Everything absolute is driven by `SITE_URL`; the build warns loudly when it is unset and CI skips the crawler check without it. |
 | Deploy | Cloudflare Pages for `site/`, `wrangler deploy` for `worker/`. `SUPABASE_ANON_KEY` goes in as a Worker secret. |
 | MCP registry listing | After deploy, as `org.<domain>/gwinnett-index`. |
-| **Run** the Duluth OCR pass | Script is fixed and tested; it has still never been *run*. No tesseract here and duluthga.net is blocked. 91 docs / 1,059 pages, ~1 hour single-threaded. See `ingest/duluth_agendas/README.md`. |
+| **Run** the Duluth OCR pass | Script is fixed and tested; it has still never been *run*. No tesseract here and duluthga.net is blocked. 91 docs / 714 scanned pages, ~1 hour single-threaded. See `ingest/duluth_agendas/README.md`. |
 | 262 applicant merge candidates | Still queued. |
 | 17 unverified UDC tables | Still unverified. Their cell values are withheld from the snapshot by design. |
 | `developer_activity` consultant misclassification | Carter Engineering and Ridgeline Land Planning still read as developers; needs the manual pass on the top 50. |

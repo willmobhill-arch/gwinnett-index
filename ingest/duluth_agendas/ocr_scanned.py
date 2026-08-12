@@ -8,7 +8,7 @@ PROPOSED; minutes say what was DECIDED and by what vote. Without OCR the corpus
 can tell you a rezoning was heard but not whether it passed, which is worse than
 useless for a land-use index. Today only 54 of 109 Duluth cases carry an outcome.
 
-The queue is 91 documents / 1,059 pages. That is an hour single-threaded and a few
+The queue is 91 documents / 714 scanned pages. That is an hour single-threaded and a few
 minutes across cores -- it was never the size that stopped this finishing.
 
 WHAT WENT WRONG IN THE FIRST VERSION, because all three are easy to repeat:
@@ -29,7 +29,7 @@ WHAT WENT WRONG IN THE FIRST VERSION, because all three are easy to repeat:
    record text_source='mixed' plus the exact page numbers that are reconstructed.
 
 3. MAX_PAGES=60 silently capped every document. Two packets exceed it, and the cap
-   would have dropped 417 of the queue's 1,059 pages -- 39% of the corpus, 322 of
+   would have dropped 417 of the queue's 1,059 total document pages -- 39% of the corpus, 322 of
    them from a single 382-page binder whose 154 scanned pages are exactly the
    signed decision record. There is no cap now; --max-pages exists but defaults to
    unlimited and says loudly what it drops.
@@ -191,6 +191,17 @@ def load_rows(path: Path) -> list[dict]:
     return [json.loads(l) for l in path.open(encoding="utf-8") if l.strip()]
 
 
+def doc_key(row: dict) -> str:
+    """Stable identity for the checkpoint file.
+
+    sha256 is the right key, but it is not guaranteed present: crawl_duluth.py used
+    to skip hashing on a cache hit, so a warm re-run produced rows without one. A
+    single malformed row must not be able to abort a 91-document job, so fall back
+    to the URL, which is unique by construction (it is the table's UNIQUE key).
+    """
+    return row.get("sha256") or row.get("url") or row.get("filename") or ""
+
+
 def build_queue(rows: list[dict], pdf_dir: Path | None, max_pages: int | None = None):
     """Split the scanned documents into (jobs, missing). Kept separate from main()
     because this is where the silent no-op lived: everything filtered out, nothing
@@ -199,7 +210,7 @@ def build_queue(rows: list[dict], pdf_dir: Path | None, max_pages: int | None = 
     jobs, missing = [], []
     for r in candidates:
         p = resolve_pdf(r, pdf_dir)
-        (jobs.append((r["sha256"], str(p), max_pages)) if p else missing.append(r))
+        (jobs.append((doc_key(r), str(p), max_pages)) if p else missing.append(r))
     return jobs, missing, candidates
 
 
@@ -232,7 +243,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         sys.exit("pymupdf is not installed:  pip install pymupdf")
 
     rows = load_rows(inp)
-    by_sha = {r.get("sha256"): r for r in rows}
+    by_sha = {doc_key(r): r for r in rows}
 
     jobs, missing, candidates = build_queue(rows, a.pdf_dir, a.max_pages)
 
@@ -281,7 +292,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     # ---- merge and write ---------------------------------------------------
     for r in rows:
-        d = done.get(r.get("sha256"))
+        d = done.get(doc_key(r))
         if not d or d.get("ocr_status", "").startswith("error"):
             r.setdefault("text_source", "embedded" if r.get("text") else "none")
             continue
