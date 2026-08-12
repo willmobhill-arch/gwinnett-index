@@ -91,11 +91,22 @@ def page_png(doc, i: int, dpi: int = DPI) -> bytes:
     return doc[i].get_pixmap(dpi=dpi).tobytes("png")
 
 
+# Tesseract parallelises each page with OpenMP, and OpenMP threads BUSY-WAIT at
+# barriers by default. Run N tesseract processes on an N-core box and you get N*N
+# spinning threads fighting for N cores, which is catastrophically worse than
+# linear rather than merely slower: a 2-page document that takes 2.3s on its own
+# blew through a 180s per-page timeout with only four workers. Pinning each
+# process to one thread and letting the process pool supply the parallelism is
+# the documented way to batch tesseract, and it is not a small effect.
+TESS_ENV = {**os.environ, "OMP_THREAD_LIMIT": "1"}
+PAGE_TIMEOUT = 120
+
+
 def tesseract(png: bytes) -> str:
     """One page through tesseract. PNG goes in on stdin; no temp file per page."""
     r = subprocess.run(
         ["tesseract", "stdin", "stdout", "--psm", "6", "-l", "eng"],
-        input=png, capture_output=True, timeout=180)
+        input=png, capture_output=True, timeout=PAGE_TIMEOUT, env=TESS_ENV)
     return r.stdout.decode("utf-8", "replace")
 
 
@@ -127,16 +138,23 @@ def ocr_document(
         dropped = targets[max_pages:]
         targets = targets[:max_pages]
 
-    parts = []
+    parts, failed = [], []
     for i in targets:
-        parts.append(f"[page {i + 1}]\n" + _ocr(_png(doc, i)))
+        try:
+            parts.append(f"[page {i + 1}]\n" + _ocr(_png(doc, i)))
+        except Exception:
+            # One unreadable page should cost one page, not the whole document.
+            # Losing a 12-page binder because page 7 is a scanned map is how a
+            # run ends up with 91 errors and nothing to show for an hour.
+            failed.append(i + 1)
     txt = clean("\n\n".join(parts))
 
     embedded = sum(len(_text(doc, i).strip()) for i in range(count) if i not in targets)
     return {
         "pages_total": count,
-        "ocr_page_numbers": [i + 1 for i in targets],
+        "ocr_page_numbers": [i + 1 for i in targets if i + 1 not in failed],
         "ocr_pages_dropped": [i + 1 for i in dropped],
+        "ocr_pages_failed": failed,
         "ocr_chars": len(txt),
         "embedded_chars": embedded,
         "text_ocr": txt,
@@ -261,9 +279,16 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     done: dict[str, dict] = {}
     if progress.exists() and not a.restart:
-        done = {d["sha256"]: d for d in load_rows(progress)}
+        # Only a SUCCESS counts as done. Treating a recorded failure as done means
+        # a bad run poisons every retry after it -- the second attempt skips
+        # exactly the documents that need attempting.
+        all_prev = {d["sha256"]: d for d in load_rows(progress)}
+        done = {k: v for k, v in all_prev.items()
+                if not str(v.get("ocr_status", "")).startswith("error")}
+        retry = len(all_prev) - len(done)
         jobs = [j for j in jobs if j[0] not in done]
-        print(f"  resuming: {len(done)} already done, {len(jobs)} remaining")
+        print(f"  resuming: {len(done)} done, {retry} previous failures to retry, "
+              f"{len(jobs)} to process")
 
     if a.limit:
         jobs = jobs[: a.limit]
@@ -312,10 +337,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     stats = collections.Counter(d.get("ocr_status", "?") for d in done.values())
     added = sum(d.get("ocr_chars", 0) for d in done.values())
     dropped = sum(len(d.get("ocr_pages_dropped") or []) for d in done.values())
+    pfailed = sum(len(d.get("ocr_pages_failed") or []) for d in done.values())
     print(f"\n  status: {dict(stats)}")
     print(f"  documents recovered: {sum(1 for d in done.values() if d.get('ocr_chars', 0) > 200)}")
     print(f"  OCR characters added: {added:,}")
     print(f"  text_source: {dict(collections.Counter(r.get('text_source') for r in rows))}")
+    if pfailed:
+        print(f"  WARNING: {pfailed} individual pages failed to OCR and are absent "
+              "from the text")
     if dropped:
         print(f"  WARNING: {dropped} scanned pages were dropped by --max-pages "
               "and are NOT in the output")

@@ -261,3 +261,27 @@ class TestDocKey(unittest.TestCase):
             jobs, missing, _ = ocr.build_queue([row], d)   # must not raise
             self.assertEqual(len(jobs), 1)
             self.assertEqual(jobs[0][0], "https://x/a.pdf")
+
+
+class TestResilience(unittest.TestCase):
+    def test_one_bad_page_costs_one_page_not_the_document(self):
+        """A 12-page binder must not be lost because page 2 is an unreadable scan.
+        The first real run failed all 20 documents it attempted, each on a single
+        page, and produced nothing for 15 minutes of work."""
+        def flaky(png):
+            i = int(png.decode().split(":")[1])
+            if i == 1:
+                raise TimeoutError("tesseract hung on this page")
+            return f"text from page {i} " * 5
+        r = ocr.ocr_document(Path("/dev/null"), None,
+                             _open=fake_open([""] * 4), _text=fake_text,
+                             _png=fake_png, _ocr=flaky)
+        self.assertEqual(r["ocr_pages_failed"], [2])
+        self.assertEqual(r["ocr_page_numbers"], [1, 3, 4], "the rest still landed")
+        self.assertGreater(r["ocr_chars"], 0)
+        self.assertEqual(r["ocr_status"], "ok")
+
+    def test_tesseract_is_pinned_to_one_thread(self):
+        """OpenMP threads busy-wait, so N processes x N threads on N cores is
+        catastrophically slower, not merely oversubscribed."""
+        self.assertEqual(ocr.TESS_ENV.get("OMP_THREAD_LIMIT"), "1")
