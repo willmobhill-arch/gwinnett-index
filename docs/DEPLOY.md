@@ -1,5 +1,9 @@
 # Deploying
 
+**Domain:** `www.gwindex.net` — canonical host, set as `SITE_URL` and as the
+Worker's custom domain.
+
+
 One `wrangler deploy` ships everything: the built site as **Workers Static Assets**
 and the API/MCP Worker alongside it.
 
@@ -9,7 +13,7 @@ SUPABASE_URL=https://losmnziukaqptxhqnhjh.supabase.co \
 SUPABASE_ANON_KEY=sb_publishable_... \
   python3 scripts/export_snapshot_rest.py
 
-cd site && SITE_URL=https://your-domain npm run ci    # build + 18 gates
+cd site && SITE_URL=https://www.gwindex.net npm run ci   # build + 18 gates
 
 # 2. deploy
 cd ../worker
@@ -70,9 +74,62 @@ Cloudflare Bot Fight Mode silently 403s them regardless of `robots.txt` while ev
 page still looks perfect in a browser:
 
 ```bash
-curl -sI -A "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot" https://your-domain/j/duluth
+curl -sI -A "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot" https://www.gwindex.net/j/duluth
 ```
 
 CI (`.github/workflows/site.yml`) asserts a 200 for GPTBot, ClaudeBot, PerplexityBot
 and CCBot on push **and weekly**, because Bot Fight Mode can be switched on from a
 dashboard with no commit anywhere.
+
+
+## Credentials, and where each one comes from
+
+| Name | Where it goes | How to get it |
+|---|---|---|
+| `SUPABASE_ANON_KEY` | `wrangler secret put` (Worker), and env for the exporter | Supabase dashboard → Project Settings → API Keys → **publishable** key. Already known; safe to hand around because RLS is SELECT-only — the same key gets `401` on a write. |
+| `CLOUDFLARE_API_TOKEN` | GitHub Actions secret (CI deploy only) | Cloudflare dashboard → My Profile → API Tokens → Create Token. Permissions below. |
+| `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secret, if the token spans several accounts | Cloudflare dashboard → Workers & Pages → right-hand sidebar |
+| `SITE_URL` | GitHub Actions **variable** (not a secret) | `https://www.gwindex.net` |
+| `DATABASE_URL` | Optional | Only needed for `export_snapshot.py` (psycopg). `export_snapshot_rest.py` uses HTTPS and needs no direct Postgres access. |
+
+### The Cloudflare API token
+
+The stock **"Edit Cloudflare Workers"** template is *not quite* enough, because
+`custom_domain = true` makes wrangler manage the DNS record. Create a custom token
+with:
+
+| Scope | Permission | Why |
+|---|---|---|
+| Account | Workers Scripts → **Edit** | upload the Worker and its static assets |
+| Account | Account Settings → **Read** | resolve the account |
+| Zone (`gwindex.net`) | Workers Routes → **Edit** | bind the custom domain |
+| Zone (`gwindex.net`) | DNS → **Edit** | create the `www` record |
+
+Nothing else. Do not use a Global API Key — it is account-wide and cannot be
+scoped or rotated independently.
+
+Local `wrangler deploy` does **not** need this token: `wrangler login` uses OAuth
+in the browser. The token exists for CI.
+
+### Deploying by hand, first time
+
+```bash
+cd worker
+npx wrangler login                       # browser OAuth, no token needed
+npx wrangler --version                   # must be >= 4.34.0
+npx wrangler secret put SUPABASE_ANON_KEY
+npx wrangler deploy
+```
+
+### Prerequisites on the Cloudflare side
+
+1. `gwindex.net` added as a zone and **active** (nameservers moved to Cloudflare).
+   `custom_domain = true` fails against a zone Cloudflare does not control.
+2. **Workers Paid** enabled ($5/mo, account-wide). Without it the asset cap is
+   20,000 files and this build is 30,496.
+3. **Bot Fight Mode OFF** — Security → Bots. It 403s AI crawlers regardless of
+   `robots.txt` and would defeat the whole premise while every page looks perfect
+   in a browser. CI checks this on every push and weekly.
+4. Decide the apex: a Redirect Rule sending `gwindex.net/*` → `https://www.gwindex.net/$1`
+   (301). Serving both hosts means every page exists twice and the sitemap only
+   names one.

@@ -47,7 +47,8 @@ Duluth minutes are OCR'd and loaded: 13.9 M characters of meeting text in the
 database, 74 of 110 Duluth cases with a decision, 68 bound directly to the motion
 that names them.
 
-Not done: no domain, nothing deployed. RLS is on and verified.
+Not done: nothing deployed yet — domain `www.gwindex.net` is registered but has no
+DNS. RLS is on and verified.
 
 ## Non-negotiables
 
@@ -259,7 +260,7 @@ GROUP BY 1;
 
 ## Next phase
 
-1. Register a domain, set `SITE_URL`, then a single `wrangler deploy` from
+1. Domain is `www.gwindex.net`. Set `SITE_URL`, then a single `wrangler deploy` from
    `worker/` — it uploads `site/dist` as static assets and the Worker together.
    `SUPABASE_ANON_KEY` goes in as a secret. Workers Paid ($5/mo) is required for
    the 100,000-file ceiling; see `docs/DEPLOY.md`.
@@ -267,7 +268,7 @@ GROUP BY 1;
    GPTBot/ClaudeBot/PerplexityBot/CCBot against the live origin, on push and
    weekly. It silently 403s AI crawlers regardless of robots.txt and would defeat
    the entire premise while every page looks fine in a browser.
-3. List the MCP server in the registry as `org.<domain>/gwinnett-index`.
+3. List the MCP server in the registry as `net.gwindex/gwinnett-index`.
 4. Duluth OCR pass.
 5. Only then widen: Peachtree Corners and Norcross are mostly config.
 

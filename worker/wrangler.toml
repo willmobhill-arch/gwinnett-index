@@ -40,5 +40,18 @@ run_worker_first = ["/v1/*", "/mcp", "/openapi.json"]
 [vars]
 SUPABASE_URL = "https://losmnziukaqptxhqnhjh.supabase.co"
 
+# Custom domain. custom_domain = true makes wrangler create and manage the DNS
+# record itself, which is why the API token needs Zone:DNS:Edit and not just the
+# stock "Edit Cloudflare Workers" template. The zone (gwindex.net) must already be
+# active in the same Cloudflare account.
+#
+# Canonical host is www. Decide the apex separately: gwindex.net should REDIRECT to
+# www rather than serve the same corpus, or every page exists at two URLs and the
+# sitemap disagrees with half of them. A Cloudflare Redirect Rule on the zone does
+# it without touching this Worker.
+[[routes]]
+pattern = "www.gwindex.net"
+custom_domain = true
+
 [observability]
 enabled = true
