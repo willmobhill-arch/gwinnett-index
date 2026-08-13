@@ -157,11 +157,16 @@ else ok.push('twin markdown is well-formed (headings separated)');
 // out from a failed deploy, after a 33-second build and a 247 MB upload, is the
 // expensive way.
 //
-// Cloudflare Pages is documented at 20,000 files and 25 MiB per file. Confirm
-// against the current limits for whichever host is used and set MAX_FILES to
-// match; the point is that the build refuses to be surprised, not that this
-// particular number is eternal.
-const MAX_FILES = Number(process.env.MAX_DEPLOY_FILES ?? 20000);
+// Deployed as Workers Static Assets on the Workers Paid plan: 100,000 files,
+// 25 MiB per individual asset. NOT Pages -- the Pages 100,000-file ceiling is
+// tied to the zone plan (Pro, $20/mo per domain) rather than to Workers Paid, so
+// buying Workers Paid does not lift the Pages 20,000 cap.
+//
+// The free tier is 20,000 either way, and wrangler older than 4.34.0 enforces
+// 20,000 regardless of plan -- a stale wrangler fails a 30,000-file deploy with
+// an error that reads like a billing problem. Set MAX_DEPLOY_FILES=20000 to model
+// the free tier deliberately.
+const MAX_FILES = Number(process.env.MAX_DEPLOY_FILES ?? 100000);
 const MAX_FILE_BYTES = Number(process.env.MAX_DEPLOY_FILE_BYTES ?? 25 * 1024 * 1024);
 
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -178,18 +183,44 @@ if (files.length > MAX_FILES) {
   fail.push(
     `${files.length.toLocaleString()} files exceeds the ${MAX_FILES.toLocaleString()}-file ` +
     `deploy limit. Two files per record (HTML + .md twin) means this grows with the corpus. ` +
-    `Options: serve .md twins from the Worker instead of statically (halves the count), ` +
-    `restrict which record families are prerendered, or deploy somewhere without the cap.`
+    `Check the plan and the wrangler version before changing the build: wrangler < 4.34.0 ` +
+    `enforces 20,000 whatever the plan says.`
   );
 } else if (files.length > MAX_FILES * 0.85) {
   warn.push(`${files.length.toLocaleString()} files is within 15% of the ${MAX_FILES.toLocaleString()} deploy limit`);
 } else {
   ok.push(`${files.length.toLocaleString()} files, ${totalMb.toFixed(0)} MB (limit ${MAX_FILES.toLocaleString()})`);
 }
-if (biggest > MAX_FILE_BYTES) {
-  fail.push(`${path.relative(DIST, biggestFile)} is ${(biggest / 1048576).toFixed(1)} MB, over the per-file limit`);
+// 25 MiB is a hard per-asset limit: an oversized file is rejected at upload, so
+// the deploy fails as a whole rather than serving a truncated corpus. The sitemap
+// and the bulk export are the two that grow without bound.
+const oversized = files.filter((f, i) => sizes[i] > MAX_FILE_BYTES);
+if (oversized.length) {
+  fail.push(
+    `${oversized.length} file(s) exceed the ${(MAX_FILE_BYTES / 1048576).toFixed(0)} MiB ` +
+    `per-asset limit: ${oversized.slice(0, 3).map((f) => path.relative(DIST, f)).join(', ')}. ` +
+    `Shard the sitemap by jurisdiction and year, or split the bulk export.`
+  );
 } else {
-  ok.push(`largest file ${(biggest / 1048576).toFixed(1)} MB (${path.relative(DIST, biggestFile)})`);
+  ok.push(
+    `largest asset ${(biggest / 1048576).toFixed(1)} MiB (${path.relative(DIST, biggestFile)}), ` +
+    `limit ${(MAX_FILE_BYTES / 1048576).toFixed(0)} MiB`
+  );
+}
+
+// The agent surface must be reachable without invoking the Worker. wrangler.toml
+// scopes run_worker_first to /v1/*, /mcp and /openapi.json; if a corpus path ever
+// needs Worker code, that promise is broken and this gate should be extended.
+const WORKER_SCOPED = ['/v1/', '/mcp', '/openapi.json'];
+const agentSurface = ['index.html', 'llms.txt', 'robots.txt', 'sitemap.xml',
+                      'data.json', 'catalog.jsonld', 'bulk/corpus.jsonl.gz'];
+const missingSurface = agentSurface.filter((f) => !exists(f));
+if (missingSurface.length) {
+  fail.push(`agent surface missing from static output: ${missingSurface.join(', ')}`);
+} else if (agentSurface.some((f) => WORKER_SCOPED.some((w) => ('/' + f).startsWith(w)))) {
+  fail.push('an agent-surface path falls inside run_worker_first and would require Worker code');
+} else {
+  ok.push(`agent surface is fully static (${agentSurface.length} entry points, no Worker needed)`);
 }
 
 // ------------------------------------------------------------------ report

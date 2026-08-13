@@ -38,9 +38,14 @@ Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
 | `meeting_document` | 353 |
 | `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
 
-Built: `db/migrations/` (all 17, md5-verified against the live project),
-`site/` (Astro, 9 route families, full agent surface), `worker/` (REST + MCP,
-5 tools, 10 protocol tests).
+Built: `db/migrations/` (23, md5-verified against the live project), `site/`
+(Astro, 15,236 pages from the real corpus, full agent surface, 18 build gates),
+`worker/` (REST + MCP, 5 tools, 10 protocol tests), deployed as Workers Static
+Assets with the Worker scoped to `/v1/*` and `/mcp`.
+
+Duluth minutes are OCR'd and loaded: 13.9 M characters of meeting text in the
+database, 74 of 110 Duluth cases with a decision, 68 bound directly to the motion
+that names them.
 
 Not done: no domain, nothing deployed. RLS is on and verified.
 
@@ -67,6 +72,23 @@ as the owner, and RLS does not apply to the owner. **Verify changes here as the
 `anon` role, not as the owner**, and for grants check `pg_proc.proacl` rather
 than the absence of an error: a `REVOKE` against another grantor's grant returns
 success and does nothing.
+
+**The agent surface must never require Worker invocation.** HTML, `.md` twins,
+`llms.txt`, sitemaps and the bulk export are served as **Workers Static Assets** —
+by the platform, not by our script. `run_worker_first` is scoped to `/v1/*`,
+`/mcp` and `/openapi.json` only, so the API and MCP can fail without taking the
+corpus offline. Agents are the primary audience; putting the thing they read
+behind our own code is the one dependency this project cannot justify. A build
+gate asserts the surface is fully static.
+
+Not Pages: the Pages 100,000-file ceiling is tied to the **zone** plan (Pro,
+$20/mo per domain), not to Workers Paid — buying Workers Paid does not lift the
+Pages 20,000 cap. Workers Static Assets gives the same ceiling for $5/mo
+account-wide, in one deployment. **Requires wrangler ≥ 4.34.0**: older versions
+silently enforce 20,000 whatever the plan says, and fail a 30,000-file deploy with
+an error that reads like a billing problem. On the free plan, `run_worker_first`
+requests that exceed limits return 429 instead of falling back to asset serving —
+don't evaluate the config on free and draw conclusions.
 
 **County case layers are unincorporated-only.** Every record in `GC_Planning`
 layers 1/2/15 is a Board of Commissioners decision. City cases are NOT in there.
@@ -161,6 +183,19 @@ not by an error.
 - **Measure the claim before printing it.** The "11× token reduction" for `.md`
   twins is really **5.7× on bytes** (median; 3.3–8.7 range). The build now prints
   the measured ratio so the copy can't drift from what ships.
+- **"Nearest preceding X" is a guess wearing a fact's clothes.** 431 of 521 motion
+  blocks in Duluth minutes are adjournments and budget items with no case at all;
+  attaching each vote to the nearest case above it would have stapled them to
+  whatever case was last mentioned. The minutes name their own case inside the
+  motion — bind to that.
+- **A decision without its verb is misleading.** SU2025-001 carried a motion to
+  *postpone*; stored as `decision='Motion carried'` that reads as approved. 8 of 68
+  extracted actions are not approvals. Keep `motion_action` beside the outcome.
+- **When one row must represent many hearings, precedence is a design decision.**
+  `coalesce(EXCLUDED, existing)` means "whichever line came last in the file".
+  SU2025-004 was approved by the PC and DENIED by Council, and was recorded as
+  approved. Rank by evidence quality first (a motion that names its case beats a
+  vote merely near one), then recency, and move all decision fields as a set.
 - **Check the "other"/unclassified bucket.** Nearly every silent bug above was
   found by looking at what failed to classify.
 - **A file size that doesn't add up is a bug signal.** 3.3 MB for 274 records of
@@ -224,8 +259,10 @@ GROUP BY 1;
 
 ## Next phase
 
-1. Register a domain, set `SITE_URL`, deploy `site/` to Cloudflare Pages and
-   `worker/` via `wrangler deploy` with `SUPABASE_ANON_KEY` as a secret.
+1. Register a domain, set `SITE_URL`, then a single `wrangler deploy` from
+   `worker/` — it uploads `site/dist` as static assets and the Worker together.
+   `SUPABASE_ANON_KEY` goes in as a secret. Workers Paid ($5/mo) is required for
+   the 100,000-file ceiling; see `docs/DEPLOY.md`.
 2. **Verify Cloudflare Bot Fight Mode is OFF.** CI already asserts a 200 for
    GPTBot/ClaudeBot/PerplexityBot/CCBot against the live origin, on push and
    weekly. It silently 403s AI crawlers regardless of robots.txt and would defeat

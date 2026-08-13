@@ -2,16 +2,43 @@ name = "gwinnett-index"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
-# SUPABASE_URL and SUPABASE_ANON_KEY are plain vars, not secrets: the anon key is
-# a publishable key and the whole API is public, read-only and unauthenticated by
-# design. That is only safe if RLS is on with SELECT-only policies — see
-# db/migrations/20260812170000_public_read_only_rls.sql. Without those policies the
-# anon key can WRITE to every table.
+# The whole site is deployed as Workers Static Assets, with the Worker attached
+# only to the API and MCP routes.
+#
+# This is the point, not an optimisation: per Cloudflare's docs, "if a requested
+# URL matches a file in the static assets directory, that file will be served -
+# without invoking Worker code." The corpus, the .md twins, llms.txt, the sitemaps
+# and the bulk export are therefore served by the platform. A bug in this Worker
+# cannot take the agent surface offline, which is the one thing this project
+# cannot afford: agents are the primary audience, not a secondary consumer of an
+# API.
+#
+# Not Pages: the Pages 100,000-file ceiling is tied to the ZONE plan (Pro, $20/mo
+# per domain), not to Workers Paid. Workers Static Assets gets the same ceiling
+# for $5/mo account-wide, in one deployment instead of Pages plus a separate
+# Worker.
+#
+# REQUIRES wrangler >= 4.34.0. Older versions silently enforce the 20,000-file
+# free-tier cap and ignore an array-valued run_worker_first, so a stale wrangler
+# fails a 30,000-file deploy with a limit error that looks like a plan problem.
+[assets]
+directory = "../site/dist"
+binding = "ASSETS"
+not_found_handling = "404-page"
+
+# Scoped deliberately. Everything NOT listed here is served straight from the
+# asset store and never reaches src/index.ts.
+#
+# FREE-TIER TRAP: on the free plan, run_worker_first requests that exceed limits
+# return 429 rather than falling back to asset serving. Do not evaluate this
+# configuration on free and draw conclusions about its behaviour under load.
+run_worker_first = ["/v1/*", "/mcp", "/openapi.json"]
+
+# SUPABASE_ANON_KEY is a secret: wrangler secret put SUPABASE_ANON_KEY
+# It is publishable and read-only (RLS is SELECT-only; the same key gets 401 on a
+# write), but keeping it in one place makes rotation a single operation.
 [vars]
 SUPABASE_URL = "https://losmnziukaqptxhqnhjh.supabase.co"
-
-# Set with: wrangler secret put SUPABASE_ANON_KEY
-# (kept out of the repo even though it is publishable, so rotation is one place)
 
 [observability]
 enabled = true

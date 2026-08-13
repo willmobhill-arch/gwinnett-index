@@ -1,0 +1,24 @@
+---
+import Base from '../layouts/Base.astro';
+import { jurisdictions } from '../lib/source';
+const js = jurisdictions().filter((j) => j.cases > 0 || j.code_sections > 0);
+---
+<Base title="Not found" description="No such page in the Gwinnett Index.">
+  <h1>Not found</h1>
+  <p class="lede">There is no page at this address.</p>
+  <p>
+    If you followed a citation here, the record may exist under a different case number or
+    citation format — case numbers are zero-padded (<code>REZ2025-00025</code>), and code
+    citations use the section identifier alone (<code>/code/duluth/402.03</code>).
+  </p>
+  <h2>Start here</h2>
+  <ul class="plain">
+    <li><a href="/">Resolve an address to its governing jurisdiction</a></li>
+    <li><a href="/j">All 19 jurisdictions</a></li>
+    {js.map((j) => (
+      <li><a href={`/j/${j.slug}`}>{j.name}</a></li>
+    ))}
+    <li><a href="/llms.txt">/llms.txt</a> <span class="sub">— orientation for agents</span></li>
+    <li><a href="/sitemap.xml">/sitemap.xml</a> <span class="sub">— every route in the index</span></li>
+  </ul>
+</Base>

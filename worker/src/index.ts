@@ -55,7 +55,11 @@ export default {
       }
 
       // --------------------------------------------------------------- REST
-      if (p === '/' || p === '/openapi.json') return json(openapi(url.origin));
+      // '/' is deliberately NOT handled here. It is a static asset (the site's
+      // index.html) served by the platform without invoking this Worker, and
+      // run_worker_first does not route it here. Claiming it would put the
+      // homepage behind Worker availability for no reason.
+      if (p === '/openapi.json') return json(openapi(url.origin));
 
       if (p === '/v1/resolve') {
         return json(await resolveJurisdiction(env, {
@@ -89,6 +93,8 @@ export default {
 
       if (p === '/v1/jurisdictions') return json(await listJurisdictions(env));
 
+      // Only reachable for paths inside run_worker_first that matched no route.
+      // Everything else 404s from the asset store against the site's 404 page.
       return json({ error: 'not found', see: `${url.origin}/openapi.json` }, 404);
     } catch (e: any) {
       const status = e instanceof HttpError ? e.status : 500;

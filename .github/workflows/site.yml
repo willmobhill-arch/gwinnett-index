@@ -39,11 +39,37 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
         run: npm run ci
 
+      - name: Assert the deploy shape against the free-tier ceiling
+        working-directory: site
+        # Informational: the project deploys on Workers Paid (100,000 files), but a
+        # build that would not fit the free tier is worth knowing about, because
+        # wrangler < 4.34.0 enforces 20,000 whatever the plan says.
+        run: MAX_DEPLOY_FILES=20000 node scripts/verify-build.mjs dist || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: site-dist
           path: site/dist
           retention-days: 7
+
+  # Deployment is one wrangler call: it uploads site/dist as Workers Static Assets
+  # and the API/MCP Worker together. Requires wrangler >= 4.34.0 -- older versions
+  # silently cap assets at 20,000 files. See docs/DEPLOY.md.
+  #
+  #  deploy:
+  #    needs: build
+  #    runs-on: ubuntu-latest
+  #    if: github.ref == 'refs/heads/main'
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      - uses: actions/setup-node@v4
+  #        with: { node-version: '22' }
+  #      - run: npm ci
+  #        working-directory: worker
+  #      - run: npx wrangler deploy
+  #        working-directory: worker
+  #        env:
+  #          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
   agent-access:
     # The check everyone forgets. Cloudflare Bot Fight Mode silently 403s AI
