@@ -1,7 +1,23 @@
 # Deploying
 
+**Live at https://www.gwindex.net** since 2026-08-13. Worker `gwinnett-index`,
+30,498 static assets, MCP listed in the official registry as
+`net.gwindex/gwinnett-index`.
+
 **Domain:** `www.gwindex.net` — canonical host, set as `SITE_URL` and as the
 Worker's custom domain.
+
+## ⚠️ Namespace keypair — move it somewhere durable
+
+Publishing updates to the MCP registry entry requires the keypair that proves
+control of the `net.gwindex` namespace (`key.pem` / `private_key.hex`). It was
+generated in a **session-temporary scratchpad**, which does not survive. Without
+it you cannot republish — not a new version, not a description fix, nothing —
+without re-doing DNS verification from scratch.
+
+Move it to a password manager or an encrypted store, and **leave the verification
+TXT record on the apex in place**; it is used for re-authentication, not just the
+initial claim.
 
 
 One `wrangler deploy` ships everything: the built site as **Workers Static Assets**
@@ -185,3 +201,50 @@ npx wrangler deploy
 4. Decide the apex: a Redirect Rule sending `gwindex.net/*` → `https://www.gwindex.net/$1`
    (301). Serving both hosts means every page exists twice and the sitemap only
    names one.
+
+
+## Live configuration, as deployed
+
+### Apex redirect
+
+`gwindex.net` had no DNS records at all, so the apex needed a proxied record for a
+Redirect Rule to fire against:
+
+| | |
+|---|---|
+| DNS | `AAAA @ → 100::`, **proxied** (the documented discard address for redirect-only apexes) |
+| Rule | `Apex to www`, active |
+| If | `http.host eq "gwindex.net"` |
+| Then | Dynamic redirect → `concat("https://www.gwindex.net", http.request.uri.path)`, **301**, preserve query string |
+
+Verified: `https://gwindex.net/j/duluth?a=1` → `301` →
+`https://www.gwindex.net/j/duluth?a=1`, on both http and https, root and deep paths.
+
+The `www` record is **wrangler-managed** via `custom_domain = true`. Never create
+or edit it by hand — a manual record conflicts with the Worker binding.
+
+### Trailing slashes
+
+`html_handling = "drop-trailing-slash"`. Astro emits `/j/duluth/index.html`, and
+Cloudflare's default (`auto-trailing-slash`) served that at `/j/duluth/` while
+307-ing `/j/duluth` — but the sitemap and every `<link rel="canonical">` use the
+no-slash form. The default meant all 15,232 HTML routes cost a redirect and served
+at a URL other than the one they declared canonical. Now the canonical form serves
+directly and the slashed form redirects to it.
+
+### MCP registry
+
+Published as `net.gwindex/gwinnett-index`, `streamable-http`,
+`https://www.gwindex.net/mcp`, namespace verified by DNS TXT on the apex.
+
+Three constraints worth knowing before republishing:
+
+- **`description` has `maxLength: 100`.** A longer one is rejected outright. The
+  published text is 91 characters. This is fine: the jurisdiction trap and the
+  67.3% figure live in the server's own `instructions` from `initialize`, which is
+  where a model actually reads them, and that field has no such limit.
+- Current manifest schema is **`2025-12-11`**; include `$schema`, and `title`,
+  `websiteUrl` and `repository` are accepted alongside it.
+- The `mcp-publisher` CLI is available as a release binary. Installing via
+  Homebrew may demand `sudo chown -R` on the Homebrew prefix — use the release
+  binary instead rather than changing system permissions.

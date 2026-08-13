@@ -47,8 +47,10 @@ Duluth minutes are OCR'd and loaded: 13.9 M characters of meeting text in the
 database, 74 of 110 Duluth cases with a decision, 68 bound directly to the motion
 that names them.
 
-Not done: nothing deployed yet — domain `www.gwindex.net` is registered but has no
-DNS. RLS is on and verified.
+**Live at https://www.gwindex.net.** Worker `gwinnett-index`, 30,498 static assets,
+apex 301s to www, MCP listed as `net.gwindex/gwinnett-index`. Verified against the
+live origin: ClaudeBot, GPTBot, PerplexityBot and CCBot all get 200 on HTML *and*
+`.md`, so Bot Fight Mode is not intercepting. RLS is on and verified.
 
 ## Non-negotiables
 
@@ -260,16 +262,19 @@ GROUP BY 1;
 
 ## Next phase
 
-1. Domain is `www.gwindex.net`. Set `SITE_URL`, then a single `wrangler deploy` from
-   `worker/` — it uploads `site/dist` as static assets and the Worker together.
-   `SUPABASE_ANON_KEY` goes in as a secret. Workers Paid ($5/mo) is required for
-   the 100,000-file ceiling; see `docs/DEPLOY.md`.
-2. **Verify Cloudflare Bot Fight Mode is OFF.** CI already asserts a 200 for
-   GPTBot/ClaudeBot/PerplexityBot/CCBot against the live origin, on push and
-   weekly. It silently 403s AI crawlers regardless of robots.txt and would defeat
-   the entire premise while every page looks fine in a browser.
-3. List the MCP server in the registry as `net.gwindex/gwinnett-index`.
-4. Duluth OCR pass.
+Deployment, the crawler check and the registry listing are all done. What remains:
+
+1. **Move the `net.gwindex` namespace keypair somewhere durable** — it was created
+   in a session-temporary scratchpad. Without it the registry entry cannot be
+   republished. Keep the apex TXT record; it is used for re-auth.
+2. **Redeploy on every data change.** `export_snapshot_rest.py` then `npm run ci`
+   then `wrangler deploy`. `SITE_URL` is baked in at build time, so a rebuild is
+   not optional. The snapshot went a day stale once and would have published an
+   older corpus with every page rendering perfectly.
+3. Minutes parser round two: ~36 of 110 Duluth cases still have no outcome, and the
+   votes are in text that is now in the database.
+4. Verify more UDC tables against their rendered pages; 17 of 18 are unverified and
+   their cell values are withheld from the snapshot by design.
 5. Only then widen: Peachtree Corners and Norcross are mostly config.
 
 ## Style
