@@ -131,6 +131,38 @@ scoped or rotated independently.
 Local `wrangler deploy` does **not** need this token: `wrangler login` uses OAuth
 in the browser. The token exists for CI.
 
+### Deploy in two phases
+
+The custom domain needs `gwindex.net` to be an **active zone** in the same
+Cloudflare account — `custom_domain = true` fails against a zone Cloudflare does
+not control, and nameserver propagation can take hours. There is no reason to wait
+for that before proving the deploy works.
+
+**Phase 1 — workers.dev, no DNS needed.** Comment out the `[[routes]]` block in
+`wrangler.toml` and deploy. The site comes up at
+`gwinnett-index.<your-subdomain>.workers.dev`, and everything except the hostname
+is identical: same assets, same run_worker_first scoping, same Worker.
+
+That is enough to check the things worth checking early:
+
+```bash
+S=https://gwinnett-index.<your-subdomain>.workers.dev
+curl -sI "$S/j/duluth" | head -1                       # static asset, no Worker
+curl -s  "$S/v1/jurisdictions" | head -c 200           # Worker route
+curl -s  "$S/j/duluth.md" | head -12                   # the .md twin
+curl -sI -A "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)" \
+     "$S/j/duluth" | head -1                           # Bot Fight Mode check
+curl -s -X POST "$S/mcp" -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -c 300
+```
+
+Build with `SITE_URL` set to the workers.dev host for this phase, or the absolute
+URLs in the sitemap and llms.txt will point at a domain that does not resolve yet.
+
+**Phase 2 — the custom domain.** Once the zone is active, restore `[[routes]]`,
+rebuild with `SITE_URL=https://www.gwindex.net`, and deploy again. Do not skip the
+rebuild: `SITE_URL` is baked into every absolute URL at build time.
+
 ### Deploying by hand, first time
 
 ```bash
