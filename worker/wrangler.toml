@@ -31,6 +31,17 @@ directory = "../site/dist"
 binding = "ASSETS"
 not_found_handling = "404-page"
 
+# Astro emits /j/duluth/index.html, and Cloudflare's default html_handling
+# ("auto-trailing-slash") serves that at /j/duluth/ and 307s /j/duluth to it. But
+# the sitemap, every <link rel="canonical"> and every internal link use the
+# NO-SLASH form, so the default made all 15,232 HTML routes cost a redirect and
+# serve at a URL other than the one they declare canonical. For an index whose
+# value is being citable, that is the wrong place to be sloppy.
+#
+# drop-trailing-slash serves /j/duluth directly and redirects the slashed form to
+# it, which is what the build already claims everywhere.
+html_handling = "drop-trailing-slash"
+
 # Scoped deliberately. Everything NOT listed here is served straight from the
 # asset store and never reaches src/index.ts.
 #
