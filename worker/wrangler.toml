@@ -18,9 +18,14 @@ compatibility_date = "2025-01-01"
 # for $5/mo account-wide, in one deployment instead of Pages plus a separate
 # Worker.
 #
-# REQUIRES wrangler >= 4.34.0. Older versions silently enforce the 20,000-file
-# free-tier cap and ignore an array-valued run_worker_first, so a stale wrangler
-# fails a 30,000-file deploy with a limit error that looks like a plan problem.
+# REQUIRES wrangler >= 4.34.0 (verified: developers.cloudflare.com 2025-09-02
+# changelog). Older versions silently enforce the 20,000-file free-tier cap, so a
+# stale wrangler fails a 30,000-file deploy with an error that looks like a plan
+# problem. Declaring it in package.json is not enough -- check the INSTALLED
+# version with `npx wrangler --version`, and note 4.x needs workers-types v5.
+#
+# `wrangler deploy` prints "Read 45735 files" for this build. That counts
+# directories too; the 30,496 files are what count against the 100,000 limit.
 [assets]
 directory = "../site/dist"
 binding = "ASSETS"

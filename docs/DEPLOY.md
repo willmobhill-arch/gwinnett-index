@@ -41,20 +41,40 @@ build gate asserts nothing in the agent surface falls inside that scope.
 
 ## Limits, and the two traps
 
-| | |
-|---|---|
-| Files, free | 20,000 |
-| Files, Workers Paid | 100,000 |
-| Per asset | 25 MiB |
-| Requests to static assets | free, unlimited; no storage cost |
+Verified against `developers.cloudflare.com/workers/platform/limits/#static-assets`
+and the 2025-09-02 changelog:
+
+| | Free | Workers Paid |
+|---|---|---|
+| Files per Worker version | 20,000 | **100,000** |
+| Individual file size | 25 MiB | 25 MiB |
+| `_headers` rules | 100 | 100 |
+| `_redirects` total | 2,100 | 2,100 |
+
+Requests to static assets are free and unlimited, with no storage cost for the
+assets themselves.
 
 Current build: **30,496 files, largest asset 3.8 MiB** — comfortably inside paid,
 and roughly 3× over free. Two files per record, so it grows with the corpus.
 
+**`wrangler deploy` reports a larger number than this and it is not a discrepancy.**
+A dry run prints `Read 45735 files from the assets directory`; that figure counts
+directories as well as files (30,496 files + 15,240 directories, less the root).
+The number that counts against the 100,000 limit is the file count. Do not "fix"
+the build in response to the wrangler message.
+
 **Trap 1 — wrangler version.** Below 4.34.0, wrangler enforces the 20,000-file cap
-*whatever your plan says*, and ignores an array-valued `run_worker_first`. The
-failure reads like a billing problem and isn't. Pinned to `^4.34.0` in
-`worker/package.json`.
+*whatever your plan says*. The failure reads like a billing problem and isn't.
+
+Pinning it in `package.json` is not sufficient on its own: this repo had
+`^4.34.0` declared while `package-lock.json` still resolved 3.114.17, and a plain
+`npm install` left it there. wrangler 4.x also requires
+`@cloudflare/workers-types@^5`, so bumping one without the other fails to resolve.
+**Check the installed version, not the declared one:**
+
+```bash
+npx wrangler --version        # must print >= 4.34.0
+```
 
 **Trap 2 — don't evaluate on free.** On the free plan, `run_worker_first` requests
 that exceed limits return **429 instead of falling back to asset serving**. Testing
