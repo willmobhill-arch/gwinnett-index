@@ -48,3 +48,21 @@ export const codeSlug = (citation: string) => {
     ? tail
     : tail.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 };
+
+
+/**
+ * A decision and the motion it applied to, together.
+ *
+ * "Motion carried" on its own is actively misleading: SU2025-004 carried a motion
+ * to DENY, and SU2025-001 one to POSTPONE. Ten of Duluth's extracted decisions
+ * mean something other than approved, and the outcome text says so in none of
+ * them. Never render one without the other.
+ */
+export const decisionWithAction = (
+  decision: string | null | undefined,
+  action: string | null | undefined,
+) => {
+  if (!decision) return '—';
+  if (!action) return decision;
+  return `${decision} — motion to ${action}`;
+};

@@ -2,7 +2,7 @@
 import Base from '../../../layouts/Base.astro';
 import Governing from '../../../components/Governing.astro';
 import { cases, bySlug } from '../../../lib/source';
-import { num, acres, date, zone, rawCode, isMined } from '../../../lib/format';
+import { num, acres, date, zone, rawCode, isMined, decisionWithAction } from '../../../lib/format';
 import { abs } from '../../../lib/site';
 
 export function getStaticPaths() {
@@ -65,12 +65,26 @@ const jsonld = {
   <dl class="facts">
     <dt>Staff recommendation</dt><dd>{rawCode(c.staff_rec)}</dd>
     <dt>Planning Commission</dt><dd>{rawCode(c.pc_rec)}{c.pc_date ? ` — ${date(c.pc_date)}` : ''}</dd>
-    <dt>Decision</dt><dd>{rawCode(c.decision)}{c.decision_date ? ` — ${date(c.decision_date)}` : ''}</dd>
+    <dt>Decision</dt>
+    <dd>{c.motion_action
+      ? decisionWithAction(c.decision, c.motion_action)
+      : rawCode(c.decision)}{c.decision_date ? ` — ${date(c.decision_date)}` : ''}</dd>
     <dt>Status</dt><dd>{rawCode(c.status)}</dd>
     {c.hearing_body && (<><dt>Heard by</dt><dd>{c.hearing_body}</dd></>)}
+    {c.moved_by && (<><dt>Moved by</dt><dd>{c.moved_by}{c.seconded_by ? `, seconded by ${c.seconded_by}` : ''}</dd></>)}
     {c.voted_for && (<><dt>Voted for</dt><dd>{c.voted_for}</dd></>)}
     {c.voted_against && (<><dt>Voted against</dt><dd>{c.voted_against}</dd></>)}
   </dl>
+  {c.motion_action && c.motion_action !== 'approve' && (
+    <div class="flag">
+      <p>
+        <strong>This is not an approval.</strong> The motion that carried was a motion
+        to <strong>{c.motion_action}</strong>. Read on its own, “{c.decision}” against a
+        land-use case reads as approved, which is why the action is recorded beside it.
+      </p>
+    </div>
+  )}
+
   <p class="sub">
     Decision and recommendation values are reproduced exactly as published. The source layer
     ships no data dictionary for these codes, so this index does not expand them — open the
@@ -81,6 +95,11 @@ const jsonld = {
   <dl class="facts">
     <dt>Source</dt>
     <dd>{c.source_url ? <a href={c.source_url}>{c.source_system}</a> : c.source_system}</dd>
+    {c.decision_source_url && c.decision_source_url !== c.source_url && (
+      <><dt>Decision recorded in</dt>
+        <dd><a href={c.decision_source_url}>the meeting document carrying the vote</a>
+        <span class="sub"> — a different document from the one describing the request</span></dd></>
+    )}
     <dt>Last verified</dt><dd>{date(c.last_verified)}</dd>
   </dl>
 </Base>

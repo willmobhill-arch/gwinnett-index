@@ -97,7 +97,8 @@ def main() -> int:
         "case_number,case_type,year,status,applicant_raw,applicant_norm,existing_zone,"
         "proposed_zone,approved_zone,acres,res_units,nonres_sqft,proposed_use,location_text,"
         "pins,staff_rec,pc_date,pc_rec,decision,decision_date,hearing_body,request_text,"
-        "voted_for,voted_against,source_url,source_system,extraction_method,last_verified,"
+        "motion_action,moved_by,seconded_by,"
+        "voted_for,voted_against,source_url,decision_source_url,source_system,extraction_method,last_verified,"
         "jurisdiction:jurisdiction_id(slug)", "case_number.asc")
     for c in cases:
         c["jurisdiction"] = (c.get("jurisdiction") or {}).get("slug")

@@ -72,6 +72,13 @@ export interface Case {
   proposed_use: string | null; location_text: string | null; pins: string[] | null;
   staff_rec: string | null; pc_date: string | null; pc_rec: string | null;
   decision: string | null; decision_date: string | null; hearing_body: string | null;
+  /** What the motion asked for. "Motion carried" alone reads as an approval even
+   *  when the motion was to deny or postpone, so the two are always shown together. */
+  motion_action: string | null;
+  moved_by: string | null; seconded_by: string | null;
+  /** The document the DECISION came from -- minutes, usually. source_url cites the
+   *  document describing the request, which is often a different meeting. */
+  decision_source_url: string | null;
   request_text: string | null; voted_for: string | null; voted_against: string | null;
   source_url: string | null; source_system: string; extraction_method: string | null;
   last_verified: string | null;
