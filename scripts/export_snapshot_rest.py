@@ -46,7 +46,11 @@ def request(path: str, headers: dict | None = None, method: str = "GET", body=No
         req.data = json.dumps(body).encode()
     try:
         with urllib.request.urlopen(req, timeout=180) as r:
-            return json.loads(r.read().decode()), dict(r.headers)
+            # Lowercase the header names. HTTP headers are case-insensitive, but
+            # urllib hands back the wire casing ("Content-Range"), so a lookup for
+            # "content-range" silently missed and every count defaulted to 0 --
+            # the status page reported 0 meeting documents against 353.
+            return json.loads(r.read().decode()), {k.lower(): v for k, v in r.headers.items()}
     except urllib.error.HTTPError as e:
         # PostgREST puts the actual reason in the BODY. urllib throws it away by
         # default, leaving a bare "HTTP Error 400: Bad Request" that says nothing
@@ -198,6 +202,8 @@ def main() -> int:
         # select=* rather than select=id: applicant_variant has a composite primary
         # key and no id column at all, so assuming one 400s the whole export.
         _, h = request(f"{extra}?select=*&limit=1", {"Prefer": "count=exact", "Range": "0-0"})
+        if "content-range" not in h:
+            sys.exit(f"FAIL: no content-range for {extra}; counts would silently be 0")
         stats[{"applicant": "applicants", "applicant_variant": "applicant_variants",
                "applicant_merge_candidate": "merge_pending",
                "meeting_document": "meeting_docs", "resolver_probe": "probes"}[extra]] = \
@@ -207,6 +213,11 @@ def main() -> int:
     # cancels it, so the score is read from resolver_score_cache -- and a cache is
     # only a gate if staleness is fatal. Refuse if it predates the most recent
     # boundary change, because that is exactly the edit that would invalidate it.
+    # Total pages across the meeting corpus. Not derivable from a count header, so
+    # it needs its own (small) fetch -- 353 integers.
+    stats["meeting_pages"] = sum(
+        (r.get("pages") or 0) for r in fetch_all("meeting_document", "pages", "id.asc"))
+
     score = fetch_all("resolver_score_cache",
                       "confidence,probes,correct,scored_at,boundary_as_of", "confidence.asc")
     if not score:

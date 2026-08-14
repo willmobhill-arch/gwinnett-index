@@ -223,6 +223,26 @@ if (missingSurface.length) {
   ok.push(`agent surface is fully static (${agentSurface.length} entry points, no Worker needed)`);
 }
 
+// ------------------------------------- no undefined/NaN in published text
+// A template that renders `undefined` produces a page that looks completely
+// normal and states a non-fact. This shipped live once: the snapshot was missing
+// meeting_pages and the homepage read "353 | undefined pages". Cheap to check,
+// impossible to notice by eye across 15,000 files.
+const leaky = locs
+  .map(toPath)
+  .flatMap((p) => [p === '/' ? 'index.html' : path.join(p, 'index.html'),
+                   p === '/' ? 'index.md' : `${p}.md`])
+  .filter((f) => exists(f) && /\b(undefined|NaN)\b/.test(read(f)));
+if (leaky.length) {
+  fail.push(
+    `${leaky.length} page(s) contain "undefined" or "NaN" in rendered text: ` +
+    `${leaky.slice(0, 4).join(', ')}. A missing snapshot field renders as a ` +
+    `non-fact rather than as an error.`
+  );
+} else {
+  ok.push('no "undefined" or "NaN" in any rendered page');
+}
+
 // ------------------------------------------------------------------ report
 for (const o of ok) console.log(`  ok    ${o}`);
 for (const w of warn) console.log(`  warn  ${w}`);
