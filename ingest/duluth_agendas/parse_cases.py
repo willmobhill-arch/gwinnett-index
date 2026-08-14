@@ -152,6 +152,17 @@ ACTION_CANON = {
     "adopting": "adopt", "accepting": "accept", "rejecting": "reject",
 }
 
+# Minutes are organised as roman-numeral headings and numbered items. A motion
+# that does not name its case still sits INSIDE the item that does -- which is a
+# structural binding, not the proximity guess that "nearest preceding case number"
+# would be, because the section boundary is what limits it.
+#
+# Used only as a fallback, and validated before being trusted: across every motion
+# where BOTH methods produce an answer, they agree 126 times and disagree 0 times.
+# Records from this path are marked minutes_section rather than minutes_motion so
+# the weaker evidence stays visible and can be ranked below the stronger.
+RE_SECTION = re.compile(r"\n\s{0,8}(?:[IVXL]{1,6}\.|\d{1,2}\.)\s+(?=\S)")
+
 RE_MOVER = re.compile(
     r"motion\s+was\s+made\s+by\s+(?P<mover>[^,]{2,60}?)\s*,\s*"
     r"(?:and\s+)?seconded\s+by\s+(?P<seconder>[^,]{2,60}?)\s*[,.]", re.I | re.S)
@@ -258,47 +269,78 @@ def main() -> int:
                 "record_kind": "request",
             })
 
-        # Minutes: decisions, bound to the case the motion itself names.
+        # Minutes: decisions, bound to the case the motion names -- or, failing
+        # that, to the case its enclosing agenda item names.
         if r.get("doc_type") == "minutes":
-            for m in RE_MINUTES_MOTION.finditer(text):
-                case_no = motion_case(m.group("motion"))
-                if not case_no:
-                    ambiguous[bool(CASE_STRICT.search(m.group("motion")))] += 1
-                    continue
-                prefix = re.match(r"[A-Z]+", case_no).group(0)
-                mv = RE_MOVER.search(m.group("motion"))
-                act = RE_MOTION_ACTION.search(m.group("motion"))
-                key = (case_no, r["body_slug"], r.get("meeting_date_final"), "minutes")
-                if key in seen:
-                    continue
-                seen.add(key)
-                out.append({
-                    "case_number": case_no,
-                    "case_prefix": prefix,
-                    "case_year": int(case_no[len(prefix):len(prefix) + 4]),
-                    "case_type": TYPE_BY_PREFIX.get(prefix, "other"),
-                    "applicant": None,
-                    "address": None,
-                    "request": squash(m.group("motion")[mv.end():] if mv
-                                       else m.group("motion"))[:2000] or None,
-                    "zone_from": None, "zone_to": None,
-                    "moved_by": squash(mv.group("mover")) if mv else None,
-                    "seconded_by": squash(mv.group("seconder")) if mv else None,
-                    "voted_for": squash(m.group("for")) or None,
-                    "voted_against": squash(m.group("against")) if m.group("against") else None,
-                    "outcome": squash(m.group("result")) or None,
-                    "motion_action": (lambda v: ACTION_CANON.get(v, v))(
-                        act.group("action").lower()) if act else None,
-                    "body_slug": r["body_slug"],
-                    "body_name": r["body_name"],
-                    "doc_type": r["doc_type"],
-                    "meeting_date": r.get("meeting_date_final"),
-                    "source_url": r["url"],
-                    "source_filename": r["filename"],
-                    "text_source": r.get("text_source", "embedded"),
-                    "extraction": "minutes_motion",
-                    "record_kind": "decision",
-                })
+            cuts = [0] + [mm.start() for mm in RE_SECTION.finditer(text)] + [len(text)]
+            for lo, hi in ((cuts[i], cuts[i + 1]) for i in range(len(cuts) - 1)):
+                section = text[lo:hi]
+                sec_cases = {f"{pfx.upper()}{yy}-{qq.zfill(3)}"
+                             for pfx, yy, qq in CASE_STRICT.findall(section)}
+                sec_case = sec_cases.pop() if len(sec_cases) == 1 else None
+
+                for m in RE_MINUTES_MOTION.finditer(section):
+                    case_no = motion_case(m.group("motion"))
+                    how = "minutes_motion"
+                    if not case_no:
+                        # The motion named no case. Bind to the agenda item it sits
+                        # in, but only when that item names exactly one -- and mark
+                        # the weaker evidence so it can be ranked below the rest.
+                        #
+                        # This recovers decisions the strict rule cannot: the
+                        # 2026-08-03 PC minutes move "to approve case MZA2026-001",
+                        # a prefix typo for MZ2026-001, and no whitelist should be
+                        # loosened to swallow that.
+                        if sec_case:
+                            case_no, how = sec_case, "minutes_section"
+                        else:
+                            ambiguous[bool(CASE_STRICT.search(m.group("motion")))] += 1
+                            continue
+
+                    prefix = re.match(r"[A-Z]+", case_no).group(0)
+                    mv = RE_MOVER.search(m.group("motion"))
+                    act = RE_MOTION_ACTION.search(m.group("motion"))
+
+                    # NOT "minutes": RE_ITEM above already claims
+                    # (case, body, date, doc_type) for the REQUEST it found in this
+                    # same minutes document, and doc_type IS "minutes". Sharing the
+                    # tuple silently dropped every decision whose case also had a
+                    # request item in the same file -- 51 of them, MZ2026-001
+                    # included, each with a complete vote block sitting in the text.
+                    key = (case_no, r["body_slug"], r.get("meeting_date_final"),
+                           "minutes-decision")
+                    if key in seen:
+                        continue
+                    seen.add(key)
+
+                    out.append({
+                        "case_number": case_no,
+                        "case_prefix": prefix,
+                        "case_year": int(case_no[len(prefix):len(prefix) + 4]),
+                        "case_type": TYPE_BY_PREFIX.get(prefix, "other"),
+                        "applicant": None,
+                        "address": None,
+                        "request": squash(m.group("motion")[mv.end():] if mv
+                                          else m.group("motion"))[:2000] or None,
+                        "zone_from": None, "zone_to": None,
+                        "moved_by": squash(mv.group("mover")) if mv else None,
+                        "seconded_by": squash(mv.group("seconder")) if mv else None,
+                        "voted_for": squash(m.group("for")) or None,
+                        "voted_against": squash(m.group("against")) if m.group("against") else None,
+                        "outcome": squash(m.group("result")) or None,
+                        "motion_action": (lambda v: ACTION_CANON.get(v, v))(
+                            act.group("action").lower()) if act else None,
+                        "body_slug": r["body_slug"],
+                        "body_name": r["body_name"],
+                        "doc_type": r["doc_type"],
+                        "meeting_date": r.get("meeting_date_final"),
+                        "source_url": r["url"],
+                        "source_filename": r["filename"],
+                        "text_source": r.get("text_source", "embedded"),
+                        "extraction": how,
+                        "record_kind": "decision",
+                    })
+
 
         # Council packets carry the DECISION -- the agenda says what was asked,
         # only the packet says what passed and who voted for it.
