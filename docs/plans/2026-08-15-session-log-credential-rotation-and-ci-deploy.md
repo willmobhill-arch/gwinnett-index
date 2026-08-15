@@ -127,10 +127,11 @@ It does not trust the build's exit code:
 | `SITE_URL` | variable |
 | `SUPABASE_URL` | variable |
 
-All four are set. The two non-secret names are read as `vars.X || secrets.X`, so either
-namespace works — but prefer Variables: a secret is masked as `***` wherever it appears,
-which makes a URL unreadable in the deploy's own verification output. They are currently
-set in both namespaces, so that output is asterisked; deleting the secret copies fixes it.
+All four are set, and `SITE_URL` and `SUPABASE_URL` now live **only** as Variables — the
+duplicate secret copies were removed, so the deploy's own verification output prints real
+URLs instead of `***`. The workflow still reads them as `vars.X || secrets.X`, which costs
+nothing and means a value put in the wrong namespace keeps working rather than reading as
+empty. Prefer Variables for anything non-secret: a secret is masked wherever it appears.
 
 `DATABASE_URL` is no longer used. Both jobs use `scripts/export_snapshot_rest.py`, which
 is stdlib-only over HTTPS and needs no direct Postgres access.
