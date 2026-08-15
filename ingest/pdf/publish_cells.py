@@ -46,6 +46,25 @@ VERIFIED_AGAINST_RENDER = {
                   'row; no rule separates them in the source.',
 }
 
+# Findings that live in a table's verification_note and are NOT about extraction
+# quality. Overwriting the note wholesale deleted the Table 6-D finding, and the build
+# gate that asserts the corpus names the tables the UDC cites but does not contain
+# caught it -- which is the entire reason that gate exists.
+PRESERVED = {
+    ('6-E', 175):
+        'ORDINANCE DEFECT (not ours): UDC sections 605.05 and 605.06 both cite '
+        '"Table 6-D" for project entrance sign provisions, but NO Table 6-D exists in '
+        'the document, and no Table 6-C either -- the sign tables run 6-A, 6-B, then '
+        '6-E. The provisions those sections describe are in THIS table (6-E). Treat '
+        '6-D as a stale cross-reference left by a renumbering. An agent asked about '
+        'Table 6-D should be told it does not exist and pointed here.',
+    ('12-A', 363):
+        'Never extracted before 2026-08-14 -- the same discovery gap as 4-C. Header, '
+        'row count (17) and page span (363-365, ONE table across three pages) were '
+        'verified against the rendered pages; the cells are long prose blocks and are '
+        'newly extracted, not yet read.',
+}
+
 UNVERIFIED_NOTE = (
     'Re-extracted 2026-08-15 from the ruled grid. Column count, header, page range and '
     'row count match tests/fixtures/duluth_udc_tables.json, which was transcribed by eye '
@@ -77,7 +96,8 @@ def main() -> int:
                 'n_rows': len(t['rows']),
                 'rows': t['rows'],
                 'quality': 'verified' if note else 'unverified',
-                'verification_note': note or UNVERIFIED_NOTE,
+                'verification_note': ' '.join(
+                    x for x in (note or UNVERIFIED_NOTE, PRESERVED.get(key)) if x),
                 'source_url': SOURCE_URL,
             }, ensure_ascii=False) + '\n')
     size = os.path.getsize(OUT)
