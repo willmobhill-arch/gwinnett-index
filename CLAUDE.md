@@ -288,6 +288,41 @@ GROUP BY 1;
   lives in its own field with `text_source='ocr'` because it's a *reconstruction*,
   never a quotation of the record.
 
+## Process lessons — what the UDC table pass cost and why
+
+The table work took three sessions and felt circular. Most of the circling was the
+verify-loop converging, which is the method; some was avoidable, and the avoidable
+part had a shape worth remembering:
+
+- **A heuristic documented as picking wrong is a verdict, not a tuning problem.**
+  Pass B scored geometry headers against markdown ones and the handoff recorded it
+  choosing wrong on 3-A and 2-C. It got tuned anyway, picked wrong again, and was
+  then replaced — cells from the ruled grid, header from the fixture — in less time
+  than the tuning took. When hand-verified ground truth exists, use it as an *input*,
+  not as a judge between two bad guesses.
+- **Batch fixes before expensive reruns.** The extract pass costs minutes, by design
+  (one subprocess per page, because page 175 segfaults). Three one-line fixes applied
+  one at a time cost three full cycles. Diff first, list every failure, fix them all,
+  run once.
+- **"Hand-verified" is not ground truth until the counting convention is written
+  down.** The fixture said 19 rows for 3-B — printed lines in the label column —
+  while every other entry counted ruled rows. Both are faithful readings of the same
+  page. A fixture without its convention is two people agreeing on different facts;
+  the convention now lives in the fixture's `_method`.
+- **Delegate the reading, never the promotion.** Subagents read ~200 cells against
+  renders and reported evidence; promotion stayed behind one dict
+  (`VERIFIED_AGAINST_RENDER`), edited only after spot-checking their falsifiable
+  claims on fresh renders. One spot-check caught the *briefing* being wrong rather
+  than the agent — 12-A's group headings were described to the agent as band rows and
+  are not. Brief verifiers on what to check, never on what they will find, and treat
+  an agent that contradicts its briefing as the most valuable kind.
+- **The loop that feels slow is the fast path.** fixture → gate → extract → compare →
+  promote reads as ceremony. Every attempt to skip a step in this project's history
+  shipped a silent wrong answer — an unverified flag, a page that existed without its
+  content, a corpus two tables short — that cost more to find than the loop costs to
+  run. Budget for the loop; economize by batching what goes through it, not by
+  cutting it.
+
 ## Known gaps
 
 - **5 of 20 UDC tables have unread cells** — 4-B (53 rows), 2-D ×2 (55 each) and
