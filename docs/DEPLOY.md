@@ -7,17 +7,21 @@
 **Domain:** `www.gwindex.net` — canonical host, set as `SITE_URL` and as the
 Worker's custom domain.
 
-## ⚠️ Namespace keypair — move it somewhere durable
+## Namespace keypair — stored, 2026-08-15
 
 Publishing updates to the MCP registry entry requires the keypair that proves
 control of the `net.gwindex` namespace (`key.pem` / `private_key.hex`). It was
-generated in a **session-temporary scratchpad**, which does not survive. Without
-it you cannot republish — not a new version, not a description fix, nothing —
-without re-doing DNS verification from scratch.
+generated in a session-temporary scratchpad and has since been **moved to durable
+storage**. Without it you could not republish — not a new version, not a
+description fix, nothing — without re-doing DNS verification from scratch.
 
-Move it to a password manager or an encrypted store, and **leave the verification
-TXT record on the apex in place**; it is used for re-authentication, not just the
-initial claim.
+**Leave the verification TXT record on the apex in place**; it is used for
+re-authentication, not just the initial claim. See *Apex records wrangler does not
+own* below.
+
+**The registry keypair and the Cloudflare API token are unrelated.** Rotating the
+token has no effect on the keypair and does not invalidate the namespace claim, so
+a rotation is never a reason to redo the keypair work.
 
 
 One `wrangler deploy` ships everything: the built site as **Workers Static Assets**
@@ -122,11 +126,63 @@ dashboard with no commit anywhere.
 
 | Name | Where it goes | How to get it |
 |---|---|---|
-| `SUPABASE_ANON_KEY` | `wrangler secret put` (Worker), and env for the exporter | Supabase dashboard → Project Settings → API Keys → **publishable** key. Already known; safe to hand around because RLS is SELECT-only — the same key gets `401` on a write. |
-| `CLOUDFLARE_API_TOKEN` | GitHub Actions secret (CI deploy only) | Cloudflare dashboard → My Profile → API Tokens → Create Token. Permissions below. |
-| `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secret, if the token spans several accounts | Cloudflare dashboard → Workers & Pages → right-hand sidebar |
-| `SITE_URL` | GitHub Actions **variable** (not a secret) | `https://www.gwindex.net` |
-| `DATABASE_URL` | Optional | Only needed for `export_snapshot.py` (psycopg). `export_snapshot_rest.py` uses HTTPS and needs no direct Postgres access. |
+| `SUPABASE_ANON_KEY` | Actions **secret**; `wrangler secret put` (Worker); env for the exporter | Supabase dashboard → Project Settings → API Keys → **publishable** key. Already known; safe to hand around because RLS is SELECT-only — the same key gets `401` on a write. |
+| `SUPABASE_URL` | Actions **variable** | `https://losmnziukaqptxhqnhjh.supabase.co` |
+| `CLOUDFLARE_API_TOKEN` | Actions **secret** (CI deploy only) | Cloudflare dashboard → My Profile → API Tokens → Create Token. Permissions below. |
+| `CLOUDFLARE_ACCOUNT_ID` | Actions **variable**, only if the token spans several accounts | Cloudflare dashboard → Workers & Pages → right-hand sidebar |
+| `SITE_URL` | Actions **variable** (not a secret) | `https://www.gwindex.net` |
+| `DATABASE_URL` | No longer used by CI | `export_snapshot.py` (psycopg) needs a direct connection on 5432. Both workflow jobs use `export_snapshot_rest.py`, which is stdlib-only over HTTPS. |
+
+The `deploy` job refuses to start unless all four of `SITE_URL`, `SUPABASE_URL`,
+`SUPABASE_ANON_KEY` and `CLOUDFLARE_API_TOKEN` are set, and reports which are
+missing by **name only**. Nothing in the workflow ever echoes a value.
+
+**Variables and Secrets are separate namespaces.** A value put in the wrong one
+reads as *empty*, not as an error, so the symptom is a step that skips or a tool
+that reports a missing setting. The two non-secret names are read as
+`vars.X || secrets.X` so either works, but prefer **Variables**: a secret is
+masked as `***` everywhere it appears, which makes a URL unreadable in logs.
+
+**Trailing whitespace is the other one.** A space pasted into the Settings form is
+invisible in the UI, survives to the runner, and surfaces as two errors that look
+nothing alike and nothing like their cause:
+
+```
+python -> http.client.InvalidURL: URL can't contain control characters
+curl   -> (3) URL rejected: Malformed input to a URL function
+```
+
+Both jobs now strip whitespace from `SITE_URL` and `SUPABASE_URL` and emit a
+`::warning::` when they had to. Secrets are **not** trimmed and re-exported — a
+modified copy stops matching the registered value, so GitHub would stop masking
+it in logs. A secret with a stray space fails the run and must be fixed at source.
+
+### Rotating the Cloudflare token
+
+Rotated **2026-08-15** — the previous token had been pasted into a session
+transcript. Create the replacement with the scopes below, add it as the
+`CLOUDFLARE_API_TOKEN` Actions secret, then **delete the old token** in the
+dashboard; a rotation is not finished until the old credential is dead.
+
+Verify a replacement without printing it — each call needs one of the four scopes:
+
+```bash
+curl -s https://api.cloudflare.com/client/v4/user/tokens/verify \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # active?
+curl -s https://api.cloudflare.com/client/v4/accounts \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Account Settings:Read
+curl -s https://api.cloudflare.com/client/v4/accounts/$ACC/workers/scripts \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Workers Scripts:Edit
+curl -s https://api.cloudflare.com/client/v4/zones/$ZONE/workers/routes \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Workers Routes
+curl -s https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # DNS
+```
+
+A token missing a scope returns `success: false` with an authentication error on
+that call alone, so the four together tell you which permission was forgotten.
+The DNS one is the easy omission: it is not in the stock Workers template and is
+only needed because `custom_domain = true` makes wrangler manage the `www` record.
 
 ### The Cloudflare API token
 
@@ -145,7 +201,10 @@ Nothing else. Do not use a Global API Key — it is account-wide and cannot be
 scoped or rotated independently.
 
 Local `wrangler deploy` does **not** need this token: `wrangler login` uses OAuth
-in the browser. The token exists for CI.
+in the browser. The token exists for CI, and CI is now where it should be used —
+`.github/workflows/site.yml` deploys on push to `main`, so the credential need
+never enter a container or a transcript again. That is what the by-hand commands
+above cost you, and why the previous token had to be rotated.
 
 ### Deploy in two phases
 
@@ -222,6 +281,30 @@ Verified: `https://gwindex.net/j/duluth?a=1` → `301` →
 
 The `www` record is **wrangler-managed** via `custom_domain = true`. Never create
 or edit it by hand — a manual record conflicts with the Worker binding.
+
+### Apex records wrangler does not own
+
+"wrangler owns DNS for this zone" is **not true at the apex**, and anything that
+reconciles DNS against this repo is working from an incomplete picture. Two records
+exist only in the dashboard, are declared nowhere in `wrangler.toml`, and each has
+something depending on it:
+
+| Record | Depended on by | What deleting it does |
+|---|---|---|
+| `AAAA @ → 100::`, **proxied** | the apex→www Redirect Rule | The rule only fires on proxied traffic, so the redirect silently stops working **while the rule still shows "Active"** — nothing anywhere reports a fault |
+| `TXT @ → v=MCPv1; k=ed25519; p=1R6K…` | the `net.gwindex` registry claim | The keypair stops authenticating and the registry entry can no longer be republished |
+
+Only `www` is wrangler's, and it should stay that way. Do not "clean up" the apex
+to match the repo — the repo was never the source of truth for these two.
+
+Note that the deploy token deliberately carries Zone → DNS on this zone, so it
+*could* remove them. A token scoped to only Workers Scripts + Account Settings +
+Workers Routes could not — but that narrower set is not sufficient for
+`custom_domain = true` to manage the `www` record either, which is why DNS is in
+the list. Verified 2026-08-15 on the rotated token: a deliberately empty
+`POST /dns_records` came back with a **validation** error (`9000`), not an
+authentication error (`10000`), which is what distinguishes DNS:Edit from DNS:Read
+without creating anything.
 
 ### Trailing slashes
 

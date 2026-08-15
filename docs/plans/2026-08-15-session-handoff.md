@@ -90,10 +90,25 @@ wrong*, which stopped being true when they were re-extracted. Every table now sa
 
 ## Still outstanding from before
 
-- **Rotate the Cloudflare API token** — it was pasted into a transcript.
-- **Move the `net.gwindex` keypair out of the scratchpad.** Without the private key the
-  MCP registry entry can never be republished, and it cannot be regenerated without
-  changing the DNS TXT record that proves domain ownership.
+- ~~**Rotate the Cloudflare API token**~~ — **done 2026-08-15.** The replacement was
+  injected into a fresh session's environment, verified against all four scopes
+  without printing it (`/user/tokens/verify` → active; account `6a35dc55…`; script
+  `gwinnett-index`; zone `gwindex.net` routes and DNS — DNS:**Edit** confirmed by an
+  empty `POST /dns_records` returning a validation error rather than an auth one, which
+  creates nothing), and the old token deleted in the dashboard. The token is now a
+  repository Actions secret and CI deploys with it — see below. It does **not** touch
+  the `net.gwindex` registry keypair, which is a separate credential.
+- ~~**Move the `net.gwindex` keypair out of the scratchpad**~~ — **done 2026-08-15**, in a
+  separate session. It is in durable storage; the registry entry can be republished.
+  **This is independent of the token rotation above** — the Cloudflare API token and the
+  `net.gwindex` keypair have nothing to do with each other, and rotating one does not
+  invalidate the other. Nobody should redo the keypair work thinking the rotation voided it.
+- **Do not reconcile apex DNS against this repo.** Two records live only in the
+  dashboard, are declared nowhere in `wrangler.toml`, and each has a dependent:
+  `AAAA @ → 100::` proxied (the apex→www Redirect Rule fires only on proxied traffic —
+  delete it and the redirect dies silently while the rule still reads "Active") and
+  `TXT @ → v=MCPv1; …` (the registry's proof of domain ownership). Only `www` is
+  wrangler-managed. Detail in `docs/DEPLOY.md` → *Apex records wrangler does not own*.
 - **Redeploy.** `export_snapshot_rest.py` → `npm run ci` → `wrangler deploy`. `SITE_URL`
   is baked in at build time, so a rebuild is not optional. **The live site is currently
   behind this branch**: it still serves the old table pages.
@@ -126,7 +141,12 @@ visible to that session — start a fresh session and it will be there. Do not p
 token into the transcript; that is what put the previous one on the rotate list.
 
 Token permissions: Account → Workers Scripts → Edit; Account → Account Settings →
-Read; Zone → Workers Routes → Edit on `gwindex.net`.
+Read; Zone → Workers Routes → Edit **and Zone → DNS → Edit** on `gwindex.net`.
+
+**That fourth scope was missing from this list and matters.** `custom_domain = true`
+makes wrangler manage the `www` record, so a token scoped to only the first three
+cannot complete a deploy. `docs/DEPLOY.md` had it right; this list did not. The
+rotated token was verified to carry it.
 
 ```bash
 cd /home/user/gwinnett-index
@@ -153,10 +173,33 @@ curl -sX POST https://www.gwindex.net/mcp -H 'content-type: application/json' \
      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -c 80                        # MCP alive
 ```
 
-**The durable fix is CI.** `.github/workflows/site.yml` already carries a commented-out
-`deploy` job. Add `CLOUDFLARE_API_TOKEN` as a repository Actions secret and uncomment
-it, and deploys happen on merge to `main` with the credential never entering a
-transcript or a container again.
+**The durable fix is CI — now built.** `.github/workflows/site.yml` carries a real
+`deploy` job: it deploys on push to `main`, reading `CLOUDFLARE_API_TOKEN` from a
+repository Actions secret, so the credential need never enter a transcript or a
+container again. **It will not run until the secret and variables exist** — see
+`docs/DEPLOY.md` → Credentials. The preflight step names what is missing and stops.
+
+Uncommenting the old block would not have been enough, and the reason is the
+recurring failure shape again — a job that succeeds while doing nothing:
+
+- The `build` job's snapshot export was gated on `if: env.DATABASE_URL != ''`, but a
+  step's own `env:` block is **not** in scope for that same step's `if:`. The name read
+  empty, the condition was always false, and the export never ran. Every CI build was
+  the ten-record `site/fixtures` sample — and `verify-build.mjs` *downgrades its gates
+  to warnings* in fixture mode, so CI was green the whole time. Both jobs now set the
+  export inputs at job level, where a step `if:` can actually see them.
+- So a deploy job stacked on that would have shipped the sample over the real index and
+  exited 0. The deploy job now hard-fails if the snapshot has fewer than 1,000 cases or
+  fewer than 20 code tables, instead of trusting the build's exit code.
+- It rebuilds rather than reusing the `site-dist` artifact, because `SITE_URL` is baked
+  in at build time — an artifact is only deployable to the host it was built for.
+- It asserts the installed wrangler is >= 4.34.0 (this repo has already shipped a
+  lockfile resolving 3.114.17 against a declared `^4.34.0`).
+- Afterwards it compares the **live** sitemap's `<loc>` count against the one just
+  built, because a deploy that uploads and then serves the previous build looks
+  identical to a successful one. Exercised against production both ways before commit:
+  matching counts pass (15,236 URLs, `/j/duluth`, `/j/duluth.md`, `/llms.txt`,
+  `/robots.txt` all 200, `/mcp` answering `tools/list`), mismatched counts exit 1.
 
 ## Method notes — do not skip these
 
