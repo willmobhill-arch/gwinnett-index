@@ -113,15 +113,17 @@ const jsonld = {
       </div>
     </>
   )}
-  {/* Two different reasons for an empty body, and saying the wrong one is a false
-      statement about the record: a defective table's cells exist and are withheld;
-      Table 12-A's have never been transcribed at all. */}
+  {/* Why the body is empty, stated precisely. Every table now HAS cells in the
+      database; what differs is whether anyone has read them against the rendered
+      page. Saying "not yet transcribed" would be false, and saying nothing would
+      leave a reader to assume the table is empty in the source. */}
   {table && (!table.rows || table.rows.length === 0) && (
     <p class="sub">
       The source page has {table.n_rows} rows × {table.n_cols} columns.{' '}
       {table.quality === 'defective'
         ? 'The extracted cell values are known to be wrong and are withheld.'
-        : 'The cell values have not been transcribed from the source page yet.'}{' '}
+        : 'The cell values have been extracted but not yet read against the rendered ' +
+          'source page, so they are withheld rather than published unchecked.'}{' '}
       The header above is {table.header_source === 'rendered-image'
         ? 'hand-checked against the rendered source page'
         : `from ${table.header_source ?? 'an unrecorded source'}`}.

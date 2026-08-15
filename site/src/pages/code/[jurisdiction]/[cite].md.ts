@@ -79,7 +79,8 @@ ${tbl?.header && tbl.rows && tbl.rows.length
       `The source page has ${tbl.n_rows} rows × ${tbl.n_cols} columns. ` +
       (tbl.quality === 'defective'
         ? 'The extracted cell values are known to be wrong and are withheld.'
-        : 'The cell values have not been transcribed from the source page yet.') + '\n'
+        : 'The cell values have been extracted but not yet read against the rendered ' +
+          'source page, so they are withheld rather than published unchecked.') + '\n'
     : ''}`
   );
 };
