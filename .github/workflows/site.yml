@@ -43,6 +43,35 @@ jobs:
       # HTTP CONNECT proxy. This one is stdlib-only and needs no pip install.
       # Absent the key the build still runs, from fixtures -- that is what keeps
       # fork pull requests working.
+      - name: Normalise and validate configuration
+        run: |
+          set -u
+          # A trailing space pasted into the Settings form is invisible in the UI
+          # and reaches the runner intact. It has already produced two red builds
+          # from one cause, wearing two unrecognisably different faces:
+          #   python -> InvalidURL: URL can't contain control characters
+          #   curl   -> (3) URL rejected: Malformed input to a URL function
+          # A URL cannot legally contain whitespace, so stripping it is safe.
+          for n in SITE_URL SUPABASE_URL; do
+            raw=$(eval printf '%s' "\"\${$n:-}\"")
+            clean=$(printf '%s' "$raw" | tr -d '[:space:]')
+            if [ "$raw" != "$clean" ]; then
+              echo "::warning title=$n contained whitespace::trimmed before use; re-enter it in Settings to silence this"
+            fi
+            echo "$n=$clean" >> "$GITHUB_ENV"
+          done
+          # Secrets are deliberately NOT re-exported through GITHUB_ENV: a trimmed
+          # copy no longer matches the registered value, so GitHub would stop
+          # masking it and the next log line could print it in full. Report the
+          # problem by name and stop instead.
+          for n in SUPABASE_ANON_KEY; do
+            raw=$(eval printf '%s' "\"\${$n:-}\"")
+            if [ -n "$raw" ] && [ "$raw" != "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
+              echo "::error title=$n contains whitespace::re-enter it in Settings with no leading or trailing spaces"
+              exit 1
+            fi
+          done
+
       # Exactly one of the pair set is always a mistake -- most likely the other
       # went into the wrong namespace -- and it is worth failing on rather than
       # quietly building the sample.
@@ -137,8 +166,8 @@ jobs:
           need() {
             if [ -z "$2" ]; then echo "  MISSING  $1"; missing=1; else echo "  ok       $1"; fi
           }
-          need "SITE_URL (repository variable)"            "${SITE_URL:-}"
-          need "SUPABASE_URL (repository variable)"        "${SUPABASE_URL:-}"
+          need "SITE_URL (variable or secret)"             "${SITE_URL:-}"
+          need "SUPABASE_URL (variable or secret)"         "${SUPABASE_URL:-}"
           need "SUPABASE_ANON_KEY (repository secret)"     "${SUPABASE_ANON_KEY:-}"
           need "CLOUDFLARE_API_TOKEN (repository secret)"  "${CLOUDFLARE_API_TOKEN:-}"
           if [ "$missing" != 0 ]; then
@@ -147,6 +176,29 @@ jobs:
             echo "Token scopes are listed in docs/DEPLOY.md > The Cloudflare API token."
             exit 1
           fi
+
+          # Strip whitespace from the URLs -- see the note on the build job; a
+          # trailing space in the Settings form is invisible and has already cost
+          # two red builds. URLs cannot legally contain any, so this is safe.
+          for n in SITE_URL SUPABASE_URL; do
+            raw=$(eval printf '%s' "\"\${$n:-}\"")
+            clean=$(printf '%s' "$raw" | tr -d '[:space:]')
+            if [ "$raw" != "$clean" ]; then
+              echo "::warning title=$n contained whitespace::trimmed before use"
+            fi
+            echo "$n=$clean" >> "$GITHUB_ENV"
+          done
+
+          # Secrets are never re-exported through GITHUB_ENV: a trimmed copy stops
+          # matching the registered value, so GitHub would stop masking it. A
+          # deploy credential with a stray space must be fixed at the source.
+          for n in SUPABASE_ANON_KEY CLOUDFLARE_API_TOKEN; do
+            raw=$(eval printf '%s' "\"\${$n:-}\"")
+            if [ "$raw" != "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
+              echo "::error title=$n contains whitespace::re-enter it with no leading or trailing spaces"
+              exit 1
+            fi
+          done
 
       - name: Export the corpus snapshot
         run: python3 scripts/export_snapshot_rest.py
@@ -298,8 +350,15 @@ jobs:
         run: |
           set -u
           fail=0
+          # See the build job: a trailing space in SITE_URL reaches curl intact and
+          # is rejected as "Malformed input to a URL function" -- which reads like
+          # the site is down rather than like a settings typo.
+          SITE_URL=$(printf '%s' "$SITE_URL" | tr -d '[:space:]')
           check() {
-            code=$(curl -sS -o /dev/null -w '%{http_code}' -A "$2" --max-time 30 "$SITE_URL$3" || echo 000)
+            # curl writes %{http_code} (as 000) even on a connection failure, so a
+            # `|| echo 000` fallback appended a second one and printed 000000.
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -A "$2" --max-time 30 "$SITE_URL$3" 2>/dev/null | tail -1)
+            [ -n "$code" ] || code=000
             if [ "$code" = "200" ]; then
               printf '  ok    %-18s %-28s %s\n' "$1" "$3" "$code"
             else

@@ -137,6 +137,26 @@ The `deploy` job refuses to start unless all four of `SITE_URL`, `SUPABASE_URL`,
 `SUPABASE_ANON_KEY` and `CLOUDFLARE_API_TOKEN` are set, and reports which are
 missing by **name only**. Nothing in the workflow ever echoes a value.
 
+**Variables and Secrets are separate namespaces.** A value put in the wrong one
+reads as *empty*, not as an error, so the symptom is a step that skips or a tool
+that reports a missing setting. The two non-secret names are read as
+`vars.X || secrets.X` so either works, but prefer **Variables**: a secret is
+masked as `***` everywhere it appears, which makes a URL unreadable in logs.
+
+**Trailing whitespace is the other one.** A space pasted into the Settings form is
+invisible in the UI, survives to the runner, and surfaces as two errors that look
+nothing alike and nothing like their cause:
+
+```
+python -> http.client.InvalidURL: URL can't contain control characters
+curl   -> (3) URL rejected: Malformed input to a URL function
+```
+
+Both jobs now strip whitespace from `SITE_URL` and `SUPABASE_URL` and emit a
+`::warning::` when they had to. Secrets are **not** trimmed and re-exported — a
+modified copy stops matching the registered value, so GitHub would stop masking
+it in logs. A secret with a stray space fails the run and must be fixed at source.
+
 ### Rotating the Cloudflare token
 
 Rotated **2026-08-15** — the previous token had been pasted into a session
