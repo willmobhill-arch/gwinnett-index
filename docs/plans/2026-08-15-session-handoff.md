@@ -109,9 +109,13 @@ wrong*, which stopped being true when they were re-extracted. Every table now sa
   delete it and the redirect dies silently while the rule still reads "Active") and
   `TXT @ → v=MCPv1; …` (the registry's proof of domain ownership). Only `www` is
   wrangler-managed. Detail in `docs/DEPLOY.md` → *Apex records wrangler does not own*.
-- **Redeploy.** `export_snapshot_rest.py` → `npm run ci` → `wrangler deploy`. `SITE_URL`
-  is baked in at build time, so a rebuild is not optional. **The live site is currently
-  behind this branch**: it still serves the old table pages.
+- ~~**Redeploy**~~ — **done 2026-08-15, and the live site is now current.** PR #1 merged to
+  `main`, which fired the new CI deploy job. Verified on production afterwards:
+  `/code/duluth/table-2-b.md` has its one `| RA-200` row, `/code/duluth/table-2-c-residential`
+  returns 200, `table-9-a.md` names `Local Street` 8 times, `/mcp` answers `tools/list`,
+  the sitemap serves 15,238 URLs, and GPTBot and ClaudeBot both get 200. **Deploy from CI
+  from now on** — merge to `main` and it happens. The by-hand path below is kept only for
+  the case where CI is unavailable.
 
 ---
 
@@ -129,11 +133,18 @@ python3 -m ingest.adapters.pdf_code --plan duluth       # the SQL to run
 The loader is in-database and fetches the repo's own raw URL, so the file must be
 **committed and pushed before the load**, and `GWINDEX_REF` picks the branch.
 
-## Deploying this branch — exact commands
+## Deploying — CI does it; this section is the fallback
 
-The branch is verified and CI-green; only the deploy is outstanding. The live site
-still serves the pre-fix table pages (confirmed: `/code/duluth/table-2-b.md` returns
-zero rows of Table 2-B, `/code/duluth/table-2-c-residential` 404s).
+**This branch is merged and deployed.** Deploys now happen automatically on push to
+`main` via the `deploy` job in `.github/workflows/site.yml`, which exports the corpus,
+refuses to ship the fixture sample, asserts wrangler >= 4.34.0, deploys, and then
+compares the live sitemap against the build it just made. Prefer that path: it keeps
+the Cloudflare token out of every container and transcript, which is why the previous
+one had to be rotated.
+
+The commands below remain correct for a local deploy when CI is unavailable. They are
+no longer the normal route, and the state they describe ("the live site still serves
+the pre-fix table pages") is **no longer true** — that was fixed by the deploy above.
 
 Needs `CLOUDFLARE_API_TOKEN` in the environment. **Environment variables are injected
 at container start**, so a variable added to the environment config mid-session is not
