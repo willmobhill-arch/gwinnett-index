@@ -14,6 +14,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Job-level, so these are in scope for a step's `if:`. A step's own `env:`
+    # block is NOT in scope for that same step's `if:`, which is what was wrong
+    # with the previous `if: env.DATABASE_URL != ''` guard -- it read an unset
+    # name, was therefore always false, and the export never ran. Every build
+    # here fell back to site/fixtures, and the gates downgrade to warnings in
+    # fixture mode rather than failing. Green, and building a ten-record sample.
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SITE_URL: ${{ vars.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,13 +31,23 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
 
+      # The REST exporter, not export_snapshot.py: that one needs a direct
+      # Postgres connection on 5432, which is unavailable anywhere egress is an
+      # HTTP CONNECT proxy. This one is stdlib-only and needs no pip install.
+      # Absent the key the build still runs, from fixtures -- that is what keeps
+      # fork pull requests working.
       - name: Export snapshot from Supabase
-        if: ${{ env.DATABASE_URL != '' }}
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        if: ${{ env.SUPABASE_ANON_KEY != '' }}
+        run: python3 scripts/export_snapshot_rest.py
+
+      - name: Report the data source
         run: |
-          pip install 'psycopg[binary]'
-          python3 scripts/export_snapshot.py
+          if [ -s data/snapshot/jurisdictions.json ]; then
+            echo "  building from data/snapshot (the corpus)"
+          else
+            echo "  building from site/fixtures (SAMPLE) — gates below degrade to warnings"
+            echo "  the deploy job refuses this; see docs/DEPLOY.md > Credentials"
+          fi
 
       - name: Install
         working-directory: site
@@ -35,8 +55,6 @@ jobs:
 
       - name: Build and verify
         working-directory: site
-        env:
-          SITE_URL: ${{ vars.SITE_URL }}
         run: npm run ci
 
       - name: Assert the deploy shape against the free-tier ceiling
@@ -56,20 +74,184 @@ jobs:
   # and the API/MCP Worker together. Requires wrangler >= 4.34.0 -- older versions
   # silently cap assets at 20,000 files. See docs/DEPLOY.md.
   #
-  #  deploy:
-  #    needs: build
-  #    runs-on: ubuntu-latest
-  #    if: github.ref == 'refs/heads/main'
-  #    steps:
-  #      - uses: actions/checkout@v4
-  #      - uses: actions/setup-node@v4
-  #        with: { node-version: '22' }
-  #      - run: npm ci
-  #        working-directory: worker
-  #      - run: npx wrangler deploy
-  #        working-directory: worker
-  #        env:
-  #          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  # This job exists so CLOUDFLARE_API_TOKEN never enters a container or a
+  # transcript again. The previous token was rotated on 2026-08-15 because it had
+  # been pasted into one. Deploy from here, not by hand.
+  #
+  # It rebuilds rather than downloading the build job's artifact on purpose:
+  # SITE_URL is baked into every absolute URL at build time, so an artifact is
+  # only deployable to the host it was built for, and a snapshot exported minutes
+  # earlier by a different job is a second thing that can silently be the sample.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Push and manual dispatch only. `github.ref == 'refs/heads/main'` alone would
+    # also match the weekly cron, which exists to catch Bot Fight Mode flipping on
+    # -- it has no reason to redeploy the site.
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
+    # Two deploys racing would leave whichever finished last live, regardless of
+    # which commit it carried. Never cancel one in flight: a half-uploaded asset
+    # set is worse than a queued deploy.
+    concurrency:
+      group: gwindex-production
+      cancel-in-progress: false
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: site/package-lock.json }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      # Fail here rather than three steps in with half the work done. Prints
+      # names only -- never a value, which is the habit that caused the rotation.
+      - name: Preflight — required configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -u
+          missing=0
+          need() {
+            if [ -z "$2" ]; then echo "  MISSING  $1"; missing=1; else echo "  ok       $1"; fi
+          }
+          need "SITE_URL (repository variable)"            "${SITE_URL:-}"
+          need "SUPABASE_URL (repository variable)"        "${SUPABASE_URL:-}"
+          need "SUPABASE_ANON_KEY (repository secret)"     "${SUPABASE_ANON_KEY:-}"
+          need "CLOUDFLARE_API_TOKEN (repository secret)"  "${CLOUDFLARE_API_TOKEN:-}"
+          if [ "$missing" != 0 ]; then
+            echo
+            echo "Set the missing ones under Settings > Secrets and variables > Actions."
+            echo "Token scopes are listed in docs/DEPLOY.md > The Cloudflare API token."
+            exit 1
+          fi
+
+      - name: Export the corpus snapshot
+        run: python3 scripts/export_snapshot_rest.py
+
+      # The failure this guards against: site/src/lib/source.ts falls back to
+      # site/fixtures when the snapshot is absent, and verify-build.mjs downgrades
+      # its gates to warnings in that mode instead of failing. So a deploy of the
+      # ten-record sample over the real index exits 0, and every page still looks
+      # perfect in a browser. Nothing else in the pipeline catches it.
+      - name: Refuse to deploy the fixture sample
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import json, pathlib, sys
+          snap = pathlib.Path('data/snapshot')
+          if not (snap / 'jurisdictions.json').is_file():
+              sys.exit('FAIL: data/snapshot absent — the build would fall back to site/fixtures')
+          counts = {}
+          for name in ('cases', 'jurisdictions', 'developers', 'code_sections', 'code_tables'):
+              f = snap / f'{name}.json'
+              counts[name] = len(json.loads(f.read_text())) if f.is_file() else 0
+          for name, n in counts.items():
+              print(f'  {name:16} {n}')
+          # site/fixtures ships 10 cases and 10 developers. The corpus is ~11,848
+          # cases. The threshold only has to separate those two, not track growth.
+          if counts['cases'] < 1000:
+              sys.exit(f"FAIL: {counts['cases']} cases — this is the sample, not the corpus")
+          if counts['code_tables'] < 20:
+              sys.exit(f"FAIL: {counts['code_tables']} code tables — expected the full 20")
+          print('  snapshot is the corpus')
+          PY
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      - name: Build and verify
+        working-directory: site
+        run: npm run ci
+
+      - name: Install wrangler
+        working-directory: worker
+        run: npm ci
+
+      # Declaring ^4 in package.json is not enough: this repo has already shipped
+      # a lockfile resolving 3.114.17 against exactly that range. Below 4.34.0
+      # wrangler enforces the 20,000-file free-tier cap whatever the plan says,
+      # and this build is ~30,500 files. The error reads like a billing problem.
+      - name: Assert wrangler >= 4.34.0
+        working-directory: worker
+        run: |
+          set -eu
+          v=$(npx wrangler --version 2>/dev/null | tr -d '\r' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          [ -n "$v" ] || { echo "FAIL: could not read the installed wrangler version"; exit 1; }
+          echo "  wrangler $v"
+          if [ "$(printf '%s\n4.34.0\n' "$v" | sort -V | head -1)" != "4.34.0" ]; then
+            echo "FAIL: wrangler $v is below 4.34.0; it would cap assets at 20,000 files"
+            exit 1
+          fi
+
+      # npx, not `npm run deploy` -- the latter fires the predeploy hook, which
+      # rebuilds the site a second time with SITE_URL unset.
+      - name: Deploy
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      # A deploy that uploads and then serves the PREVIOUS build looks identical
+      # to a successful one, so compare what is live against what was just built
+      # rather than trusting wrangler's exit code.
+      - name: Verify the live site is the build we just made
+        run: |
+          set -u
+          fail=0
+          # `grep -c` prints its count AND exits 1 when the count is zero, so a
+          # `|| echo 0` fallback would append a second line. Count with awk.
+          locs() { awk 'BEGIN{n=0} {n+=gsub(/<loc>/,"&")} END{print n+0}'; }
+
+          if [ ! -f site/dist/sitemap.xml ]; then
+            echo "  FAIL  site/dist/sitemap.xml is missing; nothing was built"
+            exit 1
+          fi
+          local_locs=$(locs < site/dist/sitemap.xml)
+          echo "  built sitemap: $local_locs <loc> entries"
+          if [ "$local_locs" -lt 1000 ]; then
+            echo "  FAIL  the build we just deployed has only $local_locs URLs"
+            exit 1
+          fi
+
+          live_locs=0
+          for attempt in 1 2 3 4 5; do
+            live_locs=$(curl -sS --max-time 60 "$SITE_URL/sitemap.xml" 2>/dev/null | locs)
+            [ "$live_locs" = "$local_locs" ] && break
+            echo "  attempt $attempt: live sitemap has $live_locs, want $local_locs — waiting"
+            sleep 10
+          done
+          if [ "$live_locs" != "$local_locs" ]; then
+            echo "  FAIL  live sitemap has $live_locs <loc> entries, built $local_locs"
+            echo "        the edge is serving a different build than the one just uploaded"
+            fail=1
+          else
+            echo "  ok    live sitemap matches the build ($live_locs entries)"
+          fi
+
+          # curl still writes %{http_code} (as 000) on a connection failure, so a
+          # `|| echo 000` fallback would double it. Take the last line only.
+          code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$SITE_URL$1" 2>/dev/null | tail -1; }
+          for p in /j/duluth /j/duluth.md /llms.txt /robots.txt; do
+            c=$(code "$p")
+            [ -n "$c" ] || c=000
+            if [ "$c" = "200" ]; then printf '  ok    %-16s %s\n' "$p" "$c"
+            else printf '  FAIL  %-16s %s\n' "$p" "$c"; fail=1; fi
+          done
+
+          mcp=$(curl -sS -X POST "$SITE_URL/mcp" -H 'content-type: application/json' \
+                --max-time 30 -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' || true)
+          if printf '%s' "$mcp" | grep -q '"jsonrpc"'; then
+            echo "  ok    /mcp answers tools/list"
+          else
+            echo "  FAIL  /mcp did not answer tools/list"; fail=1
+          fi
+
+          exit $fail
 
   agent-access:
     # The check everyone forgets. Cloudflare Bot Fight Mode silently 403s AI

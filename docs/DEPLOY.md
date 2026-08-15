@@ -122,11 +122,43 @@ dashboard with no commit anywhere.
 
 | Name | Where it goes | How to get it |
 |---|---|---|
-| `SUPABASE_ANON_KEY` | `wrangler secret put` (Worker), and env for the exporter | Supabase dashboard → Project Settings → API Keys → **publishable** key. Already known; safe to hand around because RLS is SELECT-only — the same key gets `401` on a write. |
-| `CLOUDFLARE_API_TOKEN` | GitHub Actions secret (CI deploy only) | Cloudflare dashboard → My Profile → API Tokens → Create Token. Permissions below. |
-| `CLOUDFLARE_ACCOUNT_ID` | GitHub Actions secret, if the token spans several accounts | Cloudflare dashboard → Workers & Pages → right-hand sidebar |
-| `SITE_URL` | GitHub Actions **variable** (not a secret) | `https://www.gwindex.net` |
-| `DATABASE_URL` | Optional | Only needed for `export_snapshot.py` (psycopg). `export_snapshot_rest.py` uses HTTPS and needs no direct Postgres access. |
+| `SUPABASE_ANON_KEY` | Actions **secret**; `wrangler secret put` (Worker); env for the exporter | Supabase dashboard → Project Settings → API Keys → **publishable** key. Already known; safe to hand around because RLS is SELECT-only — the same key gets `401` on a write. |
+| `SUPABASE_URL` | Actions **variable** | `https://losmnziukaqptxhqnhjh.supabase.co` |
+| `CLOUDFLARE_API_TOKEN` | Actions **secret** (CI deploy only) | Cloudflare dashboard → My Profile → API Tokens → Create Token. Permissions below. |
+| `CLOUDFLARE_ACCOUNT_ID` | Actions **variable**, only if the token spans several accounts | Cloudflare dashboard → Workers & Pages → right-hand sidebar |
+| `SITE_URL` | Actions **variable** (not a secret) | `https://www.gwindex.net` |
+| `DATABASE_URL` | No longer used by CI | `export_snapshot.py` (psycopg) needs a direct connection on 5432. Both workflow jobs use `export_snapshot_rest.py`, which is stdlib-only over HTTPS. |
+
+The `deploy` job refuses to start unless all four of `SITE_URL`, `SUPABASE_URL`,
+`SUPABASE_ANON_KEY` and `CLOUDFLARE_API_TOKEN` are set, and reports which are
+missing by **name only**. Nothing in the workflow ever echoes a value.
+
+### Rotating the Cloudflare token
+
+Rotated **2026-08-15** — the previous token had been pasted into a session
+transcript. Create the replacement with the scopes below, add it as the
+`CLOUDFLARE_API_TOKEN` Actions secret, then **delete the old token** in the
+dashboard; a rotation is not finished until the old credential is dead.
+
+Verify a replacement without printing it — each call needs one of the four scopes:
+
+```bash
+curl -s https://api.cloudflare.com/client/v4/user/tokens/verify \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # active?
+curl -s https://api.cloudflare.com/client/v4/accounts \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Account Settings:Read
+curl -s https://api.cloudflare.com/client/v4/accounts/$ACC/workers/scripts \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Workers Scripts:Edit
+curl -s https://api.cloudflare.com/client/v4/zones/$ZONE/workers/routes \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # Workers Routes
+curl -s https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"                    # DNS
+```
+
+A token missing a scope returns `success: false` with an authentication error on
+that call alone, so the four together tell you which permission was forgotten.
+The DNS one is the easy omission: it is not in the stock Workers template and is
+only needed because `custom_domain = true` makes wrangler manage the `www` record.
 
 ### The Cloudflare API token
 
@@ -145,7 +177,10 @@ Nothing else. Do not use a Global API Key — it is account-wide and cannot be
 scoped or rotated independently.
 
 Local `wrangler deploy` does **not** need this token: `wrangler login` uses OAuth
-in the browser. The token exists for CI.
+in the browser. The token exists for CI, and CI is now where it should be used —
+`.github/workflows/site.yml` deploys on push to `main`, so the credential need
+never enter a container or a transcript again. That is what the by-hand commands
+above cost you, and why the previous token had to be rotated.
 
 ### Deploy in two phases
 
