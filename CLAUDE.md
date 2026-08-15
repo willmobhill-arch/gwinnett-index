@@ -34,7 +34,7 @@ Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
 | `land_use_case` | 11,848 — 11,739 county ArcGIS + 109 Duluth agenda-mined |
 | `applicant` | 7,369 resolved from 8,246 raw spellings |
 | `code_section` | 858 Duluth UDC sections |
-| `code_table` | 20 — 9 `verified`, 11 `unverified`, 0 `defective` |
+| `code_table` | 20 — 15 `verified`, 5 `unverified`, 0 `defective` |
 | `meeting_document` | 353 |
 | `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
 
@@ -290,7 +290,10 @@ GROUP BY 1;
 
 ## Known gaps
 
-- **11 of 20 UDC tables have unread cells.** Every table's column count, header,
+- **5 of 20 UDC tables have unread cells** — 4-B (53 rows), 2-D ×2 (55 each) and
+  2-C ×2 (333 and 332). Those five are 828 of the corpus's 997 table rows, so most
+  of the *volume* is still unread even though most of the *tables* are done.
+  Fifteen tables have been read cell by cell against a rendered page. Every table's column count, header,
   page range and row count now matches `tests/fixtures/duluth_udc_tables.json`, and
   the cells come from the ruled grid rather than markdown. Nothing is `defective`
   any more — that flag asserted the stored values were *known wrong*, which stopped
@@ -311,6 +314,15 @@ SELECT citation, n_rows FROM code_table WHERE quality <> 'verified' ORDER BY n_r
   Verify against the rendered page, then add the table to `VERIFIED_AGAINST_RENDER`
   in `ingest/pdf/publish_cells.py` — that dict is the only thing that promotes a
   table, and adding a line to it is a claim that a person read the page.
+- **A correct extraction can still mislead, and the note is where that gets said.**
+  Table 5-A's stacked cells pair from the bottom (six label lines against three
+  values, so `40,000 sf` belongs to `RA-200 District`, not to `Minimum Lot Size:`).
+  6-B rows 3 and 5 sit under a label cell merged across two ruled rows and are
+  meaningless read alone. 7-C rows 2–4 are printed indented beneath a section band and
+  the subordination is visual only, so the distances read as unqualified. Superscript
+  footnote markers flatten to trailing digits everywhere, so `No minimum lot size3`
+  ends in a footnote number rather than a measurement. None of these are extraction
+  errors; all of them would mislead a reader who cannot see the page.
 - **262 applicant merge candidates await human review** in
   `applicant_merge_candidate` (`decision='pending'`). Developer counts are lower
   bounds.
