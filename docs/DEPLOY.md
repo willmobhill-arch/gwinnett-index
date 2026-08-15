@@ -7,17 +7,21 @@
 **Domain:** `www.gwindex.net` — canonical host, set as `SITE_URL` and as the
 Worker's custom domain.
 
-## ⚠️ Namespace keypair — move it somewhere durable
+## Namespace keypair — stored, 2026-08-15
 
 Publishing updates to the MCP registry entry requires the keypair that proves
 control of the `net.gwindex` namespace (`key.pem` / `private_key.hex`). It was
-generated in a **session-temporary scratchpad**, which does not survive. Without
-it you cannot republish — not a new version, not a description fix, nothing —
-without re-doing DNS verification from scratch.
+generated in a session-temporary scratchpad and has since been **moved to durable
+storage**. Without it you could not republish — not a new version, not a
+description fix, nothing — without re-doing DNS verification from scratch.
 
-Move it to a password manager or an encrypted store, and **leave the verification
-TXT record on the apex in place**; it is used for re-authentication, not just the
-initial claim.
+**Leave the verification TXT record on the apex in place**; it is used for
+re-authentication, not just the initial claim. See *Apex records wrangler does not
+own* below.
+
+**The registry keypair and the Cloudflare API token are unrelated.** Rotating the
+token has no effect on the keypair and does not invalidate the namespace claim, so
+a rotation is never a reason to redo the keypair work.
 
 
 One `wrangler deploy` ships everything: the built site as **Workers Static Assets**
@@ -257,6 +261,30 @@ Verified: `https://gwindex.net/j/duluth?a=1` → `301` →
 
 The `www` record is **wrangler-managed** via `custom_domain = true`. Never create
 or edit it by hand — a manual record conflicts with the Worker binding.
+
+### Apex records wrangler does not own
+
+"wrangler owns DNS for this zone" is **not true at the apex**, and anything that
+reconciles DNS against this repo is working from an incomplete picture. Two records
+exist only in the dashboard, are declared nowhere in `wrangler.toml`, and each has
+something depending on it:
+
+| Record | Depended on by | What deleting it does |
+|---|---|---|
+| `AAAA @ → 100::`, **proxied** | the apex→www Redirect Rule | The rule only fires on proxied traffic, so the redirect silently stops working **while the rule still shows "Active"** — nothing anywhere reports a fault |
+| `TXT @ → v=MCPv1; k=ed25519; p=1R6K…` | the `net.gwindex` registry claim | The keypair stops authenticating and the registry entry can no longer be republished |
+
+Only `www` is wrangler's, and it should stay that way. Do not "clean up" the apex
+to match the repo — the repo was never the source of truth for these two.
+
+Note that the deploy token deliberately carries Zone → DNS on this zone, so it
+*could* remove them. A token scoped to only Workers Scripts + Account Settings +
+Workers Routes could not — but that narrower set is not sufficient for
+`custom_domain = true` to manage the `www` record either, which is why DNS is in
+the list. Verified 2026-08-15 on the rotated token: a deliberately empty
+`POST /dns_records` came back with a **validation** error (`9000`), not an
+authentication error (`10000`), which is what distinguishes DNS:Edit from DNS:Read
+without creating anything.
 
 ### Trailing slashes
 

@@ -93,12 +93,22 @@ wrong*, which stopped being true when they were re-extracted. Every table now sa
 - ~~**Rotate the Cloudflare API token**~~ — **done 2026-08-15.** The replacement was
   injected into a fresh session's environment, verified against all four scopes
   without printing it (`/user/tokens/verify` → active; account `6a35dc55…`; script
-  `gwinnett-index`; zone `gwindex.net` routes and DNS), and the old token deleted in
-  the dashboard. The token is now a repository Actions secret and CI deploys with it —
-  see below.
-- **Move the `net.gwindex` keypair out of the scratchpad.** Without the private key the
-  MCP registry entry can never be republished, and it cannot be regenerated without
-  changing the DNS TXT record that proves domain ownership.
+  `gwinnett-index`; zone `gwindex.net` routes and DNS — DNS:**Edit** confirmed by an
+  empty `POST /dns_records` returning a validation error rather than an auth one, which
+  creates nothing), and the old token deleted in the dashboard. The token is now a
+  repository Actions secret and CI deploys with it — see below. It does **not** touch
+  the `net.gwindex` registry keypair, which is a separate credential.
+- ~~**Move the `net.gwindex` keypair out of the scratchpad**~~ — **done 2026-08-15**, in a
+  separate session. It is in durable storage; the registry entry can be republished.
+  **This is independent of the token rotation above** — the Cloudflare API token and the
+  `net.gwindex` keypair have nothing to do with each other, and rotating one does not
+  invalidate the other. Nobody should redo the keypair work thinking the rotation voided it.
+- **Do not reconcile apex DNS against this repo.** Two records live only in the
+  dashboard, are declared nowhere in `wrangler.toml`, and each has a dependent:
+  `AAAA @ → 100::` proxied (the apex→www Redirect Rule fires only on proxied traffic —
+  delete it and the redirect dies silently while the rule still reads "Active") and
+  `TXT @ → v=MCPv1; …` (the registry's proof of domain ownership). Only `www` is
+  wrangler-managed. Detail in `docs/DEPLOY.md` → *Apex records wrangler does not own*.
 - **Redeploy.** `export_snapshot_rest.py` → `npm run ci` → `wrangler deploy`. `SITE_URL`
   is baked in at build time, so a rebuild is not optional. **The live site is currently
   behind this branch**: it still serves the old table pages.
@@ -131,7 +141,12 @@ visible to that session — start a fresh session and it will be there. Do not p
 token into the transcript; that is what put the previous one on the rotate list.
 
 Token permissions: Account → Workers Scripts → Edit; Account → Account Settings →
-Read; Zone → Workers Routes → Edit on `gwindex.net`.
+Read; Zone → Workers Routes → Edit **and Zone → DNS → Edit** on `gwindex.net`.
+
+**That fourth scope was missing from this list and matters.** `custom_domain = true`
+makes wrangler manage the `www` record, so a token scoped to only the first three
+cannot complete a deploy. `docs/DEPLOY.md` had it right; this list did not. The
+rotated token was verified to carry it.
 
 ```bash
 cd /home/user/gwinnett-index
