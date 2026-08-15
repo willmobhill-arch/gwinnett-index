@@ -1,7 +1,6 @@
 [
  {
   "citation": "Duluth UDC Table 2-B",
-  "jurisdiction": "duluth",
   "title": "Area Regulations by Zoning District",
   "header": [
    "Zoning District",
@@ -15,13 +14,8 @@
    "Rear Setback (minimum, feet)",
    "Height (feet)"
   ],
-  "n_cols": 10,
-  "n_rows": 15,
-  "page_from": 52,
-  "page_to": 54,
-  "quality": "verified",
-  "verification_note": "Every base zoning district row checked cell-for-cell against the rendered source page 52 on 2026-08-12. Rows for PUD and the CBD districts use merged multi-line cells and remain unverified.",
-  "source_url": "https://www.duluthga.net/UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf",
+  "spanning_header": null,
+  "header_source": "rendered-image",
   "rows": [
    [
     "RA-200",
@@ -30,20 +24,20 @@
     "20",
     "40",
     "200",
-    "75, local streets 85, collector street or major thoroughfare",
-    "15, interior side 35, exterior side",
+    "75, local streets\n85, collector street or major thoroughfare",
+    "15, interior side\n35, exterior side",
     "40",
     "50"
    ],
    [
     "R-100",
-    "18,000 with sewage 25,000 with septic tank",
+    "18,000 with sewage\n25,000 with septic tank",
     "3",
     "45",
     "40",
     "100",
     "30",
-    "10, interior side 25, exterior side",
+    "10, interior side\n25, exterior side",
     "20",
     "50"
    ],
@@ -55,7 +49,7 @@
     "40",
     "75",
     "20",
-    "10, interior side 20, exterior side",
+    "10, interior side\n20, exterior side",
     "20",
     "50"
    ],
@@ -67,7 +61,7 @@
     "40",
     "50",
     "10",
-    "5, interior side 10, exterior side",
+    "5, interior side\n10, exterior side",
     "15",
     "50"
    ],
@@ -79,7 +73,7 @@
     "40",
     "50",
     "10",
-    "10, interior side 20, exterior side",
+    "10, interior side\n20, exterior side",
     "20",
     "50"
    ],
@@ -103,7 +97,7 @@
     "40",
     "---",
     "30",
-    "10, interior side 25, exterior side",
+    "10, interior side\n25, exterior side",
     "40",
     "50"
    ],
@@ -202,64 +196,159 @@
     "20",
     "15",
     "50"
+   ],
+   [
+    "PUD",
+    "Established by Master Concept Plan Approved by City Council (see Article 5)",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   [
+    "CBD (Residential uses)",
+    "---(9)",
+    "18",
+    "---(9)",
+    "---(9)",
+    "---(9)",
+    "Single-family:\nDetached - 12\nAttached - 12\nTownhouse: 5(9)\nApartment: 10",
+    "Single-family:\nDetached - 5 (7)\nAttached- 5 (7)\nTownhouse: 10\nEnd/corner unit: ---(9)\nApartment:\n2 stories - 15\n3 stories or more - 25",
+    "Single-family:\nDetached - 15\nAttached - 15\nTownhouse: 12(9)\nApartment:\n2 stories - 20\n3 stories or more - 40",
+    "4 stories"
+   ],
+   [
+    "CBD (Commercial uses)",
+    "---",
+    "---",
+    "---",
+    "---",
+    "---",
+    "---",
+    "---",
+    "---",
+    "15,000 sq. ft. or less: 25' (or 2 stories)\nGreater than 15,000 sq. ft.: 4 stories"
+   ],
+   [
+    "RD",
+    "43,560",
+    "---",
+    "80",
+    "40",
+    "100",
+    "50, from right-of-way",
+    "20",
+    "15",
+    "50"
+   ],
+   [
+    "R-TH",
+    "1,800",
+    "8",
+    "80",
+    "40",
+    "22",
+    "Rear Entry - 10\nFront Entry - 22",
+    "10, interior side\n20, exterior side",
+    "20",
+    "50"
    ]
-  ]
+  ],
+  "n_cols": 10,
+  "n_rows": 20,
+  "page_from": 52,
+  "page_to": 53,
+  "quality": "verified",
+  "verification_note": "Re-verified 2026-08-14 cell-by-cell against rendered pages 52 and 53 at 175 dpi. PREVIOUS STATE WAS WRONG: 15 rows and quality=verified, but the stored rows were page 52 only - the extractor stopped at the page boundary and silently dropped page 53. The 5 missing districts were PUD, CBD (Residential uses), CBD (Commercial uses), RD and R-TH. PUD and CBD carry merged/multi-line cells; footnotes (7)(8)(9) are on page 53.",
+  "source_url": "https://www.duluthga.net/UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf",
+  "jurisdiction": "duluth"
+ },
+ {
+  "citation": "Duluth UDC Table 3-A",
+  "title": "Maximum Allowed Maintained Illuminance Levels Produced by Outdoor Area Lighting at Property Lines",
+  "header": [
+   "Outdoor Area Lighting Installation",
+   "Measured in Horizontal Footcandles",
+   "Measured in Horizontal Lux"
+  ],
+  "spanning_header": "Maximum Maintained Illuminance Level Allowed at Property Line (At Grade)",
+  "header_source": "rendered-image",
+  "rows": [
+   [
+    "Located on property and property line adjoins a public roadway or public right of way",
+    "0.5",
+    "5.4"
+   ],
+   [
+    "Located on property and property line adjoins a non-residential property",
+    "0.2",
+    "2.2"
+   ],
+   [
+    "Located on property and property line adjoins a residential property",
+    "0.1",
+    "1.1"
+   ]
+  ],
+  "n_cols": 3,
+  "n_rows": 3,
+  "page_from": 96,
+  "page_to": 96,
+  "quality": "verified",
+  "verification_note": "Header, column count and page range verified 2026-08-14 against the rendered source page. Cell values transcribed from the rendered page and checked cell-by-cell.",
+  "source_url": "https://www.duluthga.net/UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf",
+  "jurisdiction": "duluth"
  },
  {
   "citation": "Duluth UDC Table 2-C",
-  "jurisdiction": "duluth",
-  "title": "Principal Uses Allowed by Zoning District: Central Business, Commercial, Office and Industrial",
+  "title": "Principal Uses Allowed by Zoning District: Residential",
   "header": [
    "NAICS 2022",
    "PRINCIPAL USES",
-   "CBD",
-   "C-1",
-   "C-2",
-   "HC- Retail",
-   "HC- Auto",
-   "O-I",
-   "O-N",
-   "M-1",
-   "M-2",
-   "RD",
+   "R-TH",
+   "RA-200",
+   "R-100",
+   "R-75",
+   "R-50",
+   "RM",
+   "MH",
+   "HRD",
    "See Also Article 3",
    "For Parking, See Table 4-B"
   ],
-  "n_cols": 14,
-  "n_rows": 312,
-  "page_from": 70,
-  "page_to": 85,
-  "quality": "unverified",
-  "verification_note": null,
+  "spanning_header": null,
+  "header_source": "rendered-image",
+  "rows": [],
+  "n_cols": 12,
+  "n_rows": 10,
+  "page_from": 56,
+  "page_to": 69,
+  "quality": "defective",
+  "verification_note": "Header, column count and page range verified 2026-08-14 against the rendered source page. CELL VALUES ARE KNOWN WRONG and must not be published: they came from an extractor that mis-assigned headers and, for the 2-C/2-D residential fragments, took rows from the wrong table entirely. Awaiting re-extraction.",
   "source_url": "https://www.duluthga.net/UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf",
-  "rows": []
+  "jurisdiction": "duluth"
  },
  {
-  "citation": "Duluth UDC Table 2-D",
-  "jurisdiction": "duluth",
-  "title": "Accessory and Temporary Uses Allowed by Zoning District: Residential",
+  "citation": "Duluth UDC Table 12-A",
+  "title": "Special Exceptions",
   "header": [
-   "NAICS 2022",
-   "USES",
-   "CBD",
-   "C-1",
-   "C-2",
-   "HC-Retail",
-   "HC-Auto",
-   "O-I",
-   "O-N",
-   "M-1",
-   "M-2",
-   "RD",
-   "See Also Article 3"
+   "Special Exception",
+   "Administrative Approval Parameters"
   ],
-  "n_cols": 13,
-  "n_rows": 4,
-  "page_from": 85,
-  "page_to": 89,
+  "spanning_header": null,
+  "header_source": "rendered-image",
+  "rows": [],
+  "n_cols": 2,
+  "n_rows": 17,
+  "page_from": 363,
+  "page_to": 365,
   "quality": "unverified",
-  "verification_note": null,
+  "verification_note": "NEWLY ADDED 2026-08-14. Never extracted before - same discovery gap as 4-C. Header, row count (17) and page span (363-365, ONE table across three pages) verified against rendered pages. Cell values are long prose blocks and are pending transcription; header is trustworthy, cells are not yet loaded.",
   "source_url": "https://www.duluthga.net/UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf",
-  "rows": []
+  "jurisdiction": "duluth"
  }
 ]

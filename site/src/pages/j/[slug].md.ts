@@ -2,7 +2,7 @@ import type { APIRoute, GetStaticPaths } from 'astro';
 import { jurisdictions, casesFor, codeTables } from '../../lib/source';
 import { frontmatter, facts, table, md } from '../../lib/md';
 import { abs, LICENCE, TRAP } from '../../lib/site';
-import { codeSlug, rawCode, zone } from '../../lib/format';
+import { tableSlug, rawCode, zone } from '../../lib/format';
 
 export const getStaticPaths: GetStaticPaths = () =>
   jurisdictions().map((j) => ({ params: { slug: j.slug }, props: { j } }));
@@ -54,7 +54,7 @@ ${facts([
   ['FIPS place', j.fips_place],
 ])}
 
-${tabs.length ? `## Code tables\n\n${tabs.map((t) => `- [${t.citation}](${abs(`/code/${j.slug}/${codeSlug(t.citation)}.md`)}) — ${t.title}${t.quality === 'verified' ? ' (verified)' : ' (UNVERIFIED extraction — do not rely on these numbers)'}`).join('\n')}\n` : ''}
+${tabs.length ? `## Code tables\n\n${tabs.map((t) => `- [${t.citation}](${abs(`/code/${j.slug}/${tableSlug(t)}.md`)}) — ${t.title}${t.quality === 'verified' ? ' (verified)' : t.quality === 'defective' ? ' (header verified; CELL VALUES KNOWN WRONG, withheld)' : ' (UNVERIFIED extraction — do not rely on these numbers)'}`).join('\n')}\n` : ''}
 ${cs.length ? `## Recent cases\n\n${table(
   ['Case', 'Year', 'Applicant', 'Zoning', 'Decision', 'Page'],
   cs.map((c) => [

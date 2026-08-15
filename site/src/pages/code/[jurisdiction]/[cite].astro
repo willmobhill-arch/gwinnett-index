@@ -1,32 +1,28 @@
 ---
 import Base from '../../../layouts/Base.astro';
 import Governing from '../../../components/Governing.astro';
-import { codeSections, codeTables, bySlug } from '../../../lib/source';
-import { codeSlug } from '../../../lib/format';
+import { bySlug } from '../../../lib/source';
+import { codeItems } from '../../../lib/routes';
 import { abs } from '../../../lib/site';
 
+// One page per code item, carrying BOTH records that describe it — the prose
+// section and the structured table. See codeItems(); routing them separately put
+// the verified Table 2-B on no page at all.
 export function getStaticPaths() {
-  const secs = codeSections().map((s) => ({
-    params: { jurisdiction: s.jurisdiction, cite: codeSlug(s.citation) },
-    props: { section: s, table: null },
+  return codeItems().map((it) => ({
+    params: { jurisdiction: it.jurisdiction, cite: it.cite },
+    props: { section: it.section, table: it.table },
   }));
-  const tabs = codeTables().map((t) => ({
-    params: { jurisdiction: t.jurisdiction, cite: codeSlug(t.citation) },
-    props: { section: null, table: t },
-  }));
-  const seen = new Set<string>();
-  return [...secs, ...tabs].filter((p) => {
-    const k = `${p.params.jurisdiction}/${p.params.cite}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
 }
 const { section, table } = Astro.props;
 const { jurisdiction, cite } = Astro.params;
 const j = bySlug(jurisdiction!)!;
 const item = section ?? table!;
 const title = item.citation;
+// The table's page range was read off the rendered pages; the section's comes
+// from the prose parser and overshoots (2-C is p56-69, not p56-70).
+const pageFrom = table?.page_from ?? section?.page_from;
+const pageTo = table?.page_to ?? section?.page_to;
 
 const jsonld = {
   '@context': 'https://schema.org',
@@ -51,13 +47,24 @@ const jsonld = {
   <dl class="facts">
     {section?.article && (<><dt>Article</dt><dd>{section.article} — {section.article_title}</dd></>)}
     <dt>Pages in source</dt>
-    <dd>{item.page_from}{item.page_to && item.page_to !== item.page_from ? `–${item.page_to}` : ''}</dd>
+    <dd>{pageFrom}{pageTo && pageTo !== pageFrom ? `–${pageTo}` : ''}</dd>
     {section?.adopted_date && (<><dt>Adopted</dt><dd>{section.adopted_date}</dd></>)}
     {section?.amended_through && (<><dt>Amended through</dt><dd>{section.amended_through}</dd></>)}
     <dt>Source</dt><dd><a href={item.source_url}>Adopted PDF</a></dd>
   </dl>
 
-  {table && table.quality !== 'verified' && (
+  {table && table.quality === 'defective' && (
+    <div class="flag">
+      <p>
+        <strong>Cell values known wrong — withheld.</strong> This table's header, column count
+        and page range have been checked against the rendered source page, but its cell values
+        came from an extractor that mis-assigned columns, and they are not published. This is a
+        stronger statement than "unverified": the numbers are known to be incorrect, not merely
+        unchecked. Open the source page.
+      </p>
+    </div>
+  )}
+  {table && table.quality === 'unverified' && (
     <div class="flag">
       <p>
         <strong>Unverified extraction.</strong> This table was recovered from the PDF
@@ -67,9 +74,16 @@ const jsonld = {
       </p>
     </div>
   )}
-  {table && table.quality === 'verified' && table.verification_note && (
+  {/* Shown for every quality, not just verified. The note on Table 6-E records an
+      ordinance defect — §605.05 and §605.06 both cite a "Table 6-D" that does not
+      exist — and 6-E is `defective`, so gating this on quality==='verified' kept
+      that finding in the database and off every page. */}
+  {table && table.verification_note && (
     <div class="flag">
-      <p><strong>Verified.</strong> {table.verification_note}</p>
+      <p>
+        <strong>{table.quality === 'verified' ? 'Verified.' : 'Verification note.'}</strong>{' '}
+        {table.verification_note}
+      </p>
     </div>
   )}
 
@@ -80,21 +94,37 @@ const jsonld = {
     </>
   )}
 
-  {table?.header && table.rows && table.rows.length > 0 && (
+  {table?.header && (
     <>
-      <h2>Table</h2>
+      <h2>{table.rows && table.rows.length > 0 ? 'Table' : 'Columns'}</h2>
+      {table.spanning_header && (
+        <p class="sub">
+          Spanning header: <strong>{table.spanning_header}</strong> — a label printed above and
+          across the columns below. Without it Table 4-A reads "6 am to 5 pm" twice.
+        </p>
+      )}
       <div class="scroll">
         <table>
           <thead><tr>{table.header.map((h) => <th>{h}</th>)}</tr></thead>
-          <tbody>{table.rows.map((r) => <tr>{r.map((v) => <td>{v}</td>)}</tr>)}</tbody>
+          {table.rows && table.rows.length > 0 && (
+            <tbody>{table.rows.map((r) => <tr>{r.map((v) => <td>{v}</td>)}</tr>)}</tbody>
+          )}
         </table>
       </div>
     </>
   )}
+  {/* Two different reasons for an empty body, and saying the wrong one is a false
+      statement about the record: a defective table's cells exist and are withheld;
+      Table 12-A's have never been transcribed at all. */}
   {table && (!table.rows || table.rows.length === 0) && (
     <p class="sub">
-      {table.n_rows} rows × {table.n_cols} columns extracted; the cell values are held in the
-      database but are not published here while the extraction is unverified.
+      The source page has {table.n_rows} rows × {table.n_cols} columns.{' '}
+      {table.quality === 'defective'
+        ? 'The extracted cell values are known to be wrong and are withheld.'
+        : 'The cell values have not been transcribed from the source page yet.'}{' '}
+      The header above is {table.header_source === 'rendered-image'
+        ? 'hand-checked against the rendered source page'
+        : `from ${table.header_source ?? 'an unrecorded source'}`}.
     </p>
   )}
 </Base>

@@ -1,0 +1,174 @@
+{
+ "_about": "Hand-verified ground truth for Duluth UDC tables, read from rendered page images on 2026-08-14. This is the regression fixture: an extractor run must reproduce n_cols, header and n_rows exactly, or the build fails. Source: UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf, sha256 2311ae985c3f1e46cb84844fdb09bfe92b89917572e112c29b78cb9fe94a48c0, Last-Modified 2026-07-16.",
+ "_method": "Each table was rendered at 200 dpi and transcribed by eye. Automated extraction was NOT trusted for any value here.",
+ "tables": [
+  {
+   "label": "2-B", "title": "Area Regulations by Zoning District",
+   "page_from": 52, "page_to": 53, "n_cols": 10, "n_rows": 20,
+   "spanning_header": null,
+   "header": ["Zoning District", "Lot size (minimum, square feet)(8)", "Density (maximum, dwelling units per gross acre)", "Lot Coverage (maximum, percent)", "Lot Frontage (minimum, feet)", "Lot Width (minimum, feet)", "Front Setback (minimum, feet)", "Side Setback (minimum, feet)", "Rear Setback (minimum, feet)", "Height (feet)"],
+   "row_keys": ["RA-200", "R-100", "R-75", "R-50", "RM", "MH", "HRD", "C-1", "C-2", "HC-Auto", "HC-Retail", "O-I", "O-N", "M-1", "M-2", "PUD", "CBD (Residential uses)", "CBD (Commercial uses)", "RD", "R-TH"],
+   "note": "DB had 15 rows and quality='verified'. Source has 20. The verified flag was wrong."
+  },
+  {
+   "label": "2-C", "title": "Principal Uses Allowed by Zoning District: Residential",
+   "page_from": 56, "page_to": 69, "n_cols": 12, "n_rows": null,
+   "spanning_header": null,
+   "header": ["NAICS 2022", "PRINCIPAL USES", "R-TH", "RA-200", "R-100", "R-75", "R-50", "RM", "MH", "HRD", "See Also Article 3", "For Parking, See Table 4-B"],
+   "note": "Header confirmed against rendered p57. DB had the COMMERCIAL header and 10 rows taken from p70. Corrected extractor yields ~368 rows; exact count still to be pinned."
+  },
+  {
+   "label": "2-C", "title": "Principal Uses Allowed by Zoning District: Central Business, Commercial, Office and Industrial",
+   "page_from": 70, "page_to": 84, "n_cols": 14, "n_rows": null,
+   "spanning_header": null,
+   "header": ["NAICS 2022", "PRINCIPAL USES", "CBD", "C-1", "C-2", "HC-Retail", "HC-Auto", "O-I", "O-N", "M-1", "M-2", "RD", "See Also Article 3", "For Parking, See Table 4-B"]
+  },
+  {
+   "label": "2-D", "title": "Accessory and Temporary Uses Allowed by Zoning District: Residential",
+   "page_from": 85, "page_to": 88, "n_cols": 11, "n_rows": 55,
+   "spanning_header": null,
+   "header": ["NAICS 2022", "USES", "R-TH", "RA-200", "R-100", "R-75", "R-50", "RM", "MH", "HRD", "See Also Article 3"],
+   "note": "DB had the COMMERCIAL header and 4 rows taken from p89."
+  },
+  {
+   "label": "2-D", "title": "Accessory and Temporary Uses Allowed by Zoning District: Central Business, Commercial, Office, and Industrial",
+   "page_from": 89, "page_to": 94, "n_cols": 13, "n_rows": null,
+   "spanning_header": null,
+   "header": ["NAICS 2022", "USES", "CBD", "C-1", "C-2", "HC-Retail", "HC-Auto", "O-I", "O-N", "M-1", "M-2", "RD", "See Also Article 3"]
+  },
+  {
+   "label": "3-A", "title": "Maximum Allowed Maintained Illuminance Levels Produced by Outdoor Area Lighting at Property Lines",
+   "page_from": 96, "page_to": 96, "n_cols": 3, "n_rows": 3,
+   "spanning_header": "Maximum Maintained Illuminance Level Allowed at Property Line (At Grade)",
+   "header": ["Outdoor Area Lighting Installation", "Measured in Horizontal Footcandles", "Measured in Horizontal Lux"],
+   "rows": [
+    ["Located on property and property line adjoins a public roadway or public right of way", "0.5", "5.4"],
+    ["Located on property and property line adjoins a non-residential property", "0.2", "2.2"],
+    ["Located on property and property line adjoins a residential property", "0.1", "1.1"]
+   ]
+  },
+  {
+   "label": "3-B", "title": "Allowed Building Materials",
+   "page_from": 102, "page_to": 102, "n_cols": 5, "n_rows": 19,
+   "spanning_header": "Zoning District",
+   "header": ["Building Materials", "O-N, C-1", "C-2, HC-Retail, HC-Auto, and O-I", "M-1, M-2", "Institutional Uses* Where Allowed"]
+  },
+  {
+   "label": "4-A", "title": "Percentage of Required Parking Spaces by Time Period",
+   "page_from": 136, "page_to": 136, "n_cols": 6, "n_rows": 6,
+   "spanning_header": "Weekdays | Weekends | Nighttime",
+   "header": ["Type of Use", "6 am to 5 pm", "5pm to 1 am", "6 am to 5 pm", "5pm to 1 am", "1am to 6 am"],
+   "rows": [
+    ["Office", "100%", "10%", "10%", "5%", "5%"],
+    ["Retail", "60%", "90%", "100%", "70%", "5%"],
+    ["Hotel", "75%", "100%", "75%", "100%", "75%"],
+    ["Restaurant", "50%", "100%", "100%", "100%", "10%"],
+    ["Entertainment/Recreation", "40%", "100%", "80%", "100%", "10%"],
+    ["Religious Facility", "10%", "25%", "100%", "100%", "10%"]
+   ],
+   "note": "DB had 13 rows and lost the sub-column time periods entirely."
+  },
+  {
+   "label": "4-B", "title": "Minimum Parking Spaces by Use",
+   "page_from": 139, "page_to": 141, "n_cols": 3, "n_rows": null,
+   "spanning_header": null,
+   "header": ["Use", "Number of Parking Spaces:", "Required for Each:"]
+  },
+  {
+   "label": "4-C", "title": "Handicap Accessible Spaces Required",
+   "page_from": 142, "page_to": 142, "n_cols": 2, "n_rows": 11,
+   "spanning_header": null,
+   "header": ["Total Spaces Provided for Use", "Minimum Number of Handicap Spaces"],
+   "rows": [
+    ["1 to 25", "1"], ["26 to 50", "2"], ["51 to 75", "3"], ["76 to 100", "4"],
+    ["101 to 150", "5"], ["151 to 200", "6"], ["201 to 300", "7"], ["301 to 400", "8"],
+    ["401 to 500", "9"], ["501 to 1,000", "2% of total"],
+    ["1,001 and over", "20, plus 1 for each 100 over 1,000"]
+   ],
+   "note": "NEVER EXTRACTED before. Missed because discovery required 'Table 4-C:' with punctuation."
+  },
+  {
+   "label": "5-A", "title": "Summary Comparison of Subdivisions and Developments",
+   "page_from": 149, "page_to": 149, "n_cols": 5, "n_rows": 5,
+   "spanning_header": null,
+   "header": ["", "Conventional Subdivision 1", "Conservation Subdivision", "Planned Unit Development", "Other Planned Developments"]
+  },
+  {
+   "label": "6-A", "title": "Principal Freestanding and Building Signs—Residential Uses",
+   "page_from": 170, "page_to": 171, "n_cols": 3, "n_rows": 13,
+   "spanning_header": null,
+   "header": ["", "Single-Family Residence4", "Multi-Family Developments5"]
+  },
+  {
+   "label": "6-B", "title": "Principal Freestanding and Building Signs—Nonresidential Uses",
+   "page_from": 172, "page_to": 173, "n_cols": 4, "n_rows": 22,
+   "spanning_header": "All Other Nonresidential Properties8",
+   "header": ["", "Property Zoned O-N (Office-Neighborhood)", "One or Two Tenants9", "Three or More Tenants"],
+   "note": "DB had 20 rows and the spanning label cut mid-word across two columns."
+  },
+  {
+   "label": "6-E", "title": "Project Entrance Signs—By Land Use",
+   "page_from": 175, "page_to": 176, "n_cols": 4, "n_rows": 12,
+   "spanning_header": "Residential Use | Nonresidential Use",
+   "header": ["", "Single-Family Subdivision 12", "Multi-Family Development 13", "Office or Industrial Park (subdivision)"],
+   "note": "find_tables() SEGFAULTS on p175 - never call it there."
+  },
+  {
+   "label": "7-A", "title": "Situations Where Buffer Required",
+   "page_from": 189, "page_to": 189, "n_cols": 6, "n_rows": 3,
+   "spanning_header": "1. Provide a buffer on the lot of this use",
+   "header": ["2. Along a side or rear lot line next to this use or zoning", "Single-Family Residence", "Multi-Family", "Office or Institutional", "Commercial1", "Industrial"],
+   "rows": [
+    ["Single-Family Residential2", "None", "50 feet", "50 feet", "50 feet3", "50 feet"],
+    ["Multi-Family Residential4", "None", "None", "35 feet", "35 feet", "35 feet"],
+    ["Office, Institutional, Commercial or Industrial", "None", "None", "None", "None", "None"]
+   ],
+   "note": "Two-axis table. DB header was one sentence split across four columns - structurally meaningless."
+  },
+  {
+   "label": "7-B", "title": "Tree Canopy Cover Requirements by Zoning District",
+   "page_from": 199, "page_to": 199, "n_cols": 3, "n_rows": 18,
+   "spanning_header": null,
+   "header": ["Land Use Zone", "Total Tree Canopy Cover, Conserved and Planted", "Conserved Tree Canopy Cover Component of Total (lots greater than or equal to 14250 sq. ft.)"],
+   "rows": [
+    ["RA-200", "0%", "0%"], ["R-100 Site", "60%", "40%"], ["Each Lot", "50%", "30%"],
+    ["R-75 Site", "60%", "40%"], ["Each Lot", "50%", "30%"], ["RM", "45%", "15%"],
+    ["MH", "55%", "35%"], ["HRD", "45%", "15%"], ["C-1", "40%", "10%"],
+    ["C-2", "40%", "10%"], ["HC-R", "40%", "10%"], ["HC-A", "40%", "10%"],
+    ["O-I", "50%", "25%"], ["O-N", "50%", "25%"], ["CBD", "0%", "0%"],
+    ["M-1", "30%", "0%"], ["M-2", "20%", "0%"], ["RD", "30%", "0%"]
+   ],
+   "note": "Title is printed 'TABLE 7-B ...' - all caps, no colon. This is why discovery missed it."
+  },
+  {
+   "label": "7-C", "title": "Minimum Distances in Feet Required between Trees and Structures or Infrastructure by Tree Canopy Size Category",
+   "page_from": 210, "page_to": 210, "n_cols": 5, "n_rows": 11,
+   "spanning_header": "Tree Canopy Size Category from the City of Duluth Tree Species List",
+   "header": ["Structure/Infrastructure Description", "Large", "Medium", "Small", "Very Small"]
+  },
+  {
+   "label": "9-A", "title": "Minimum Right-of-Way and Roadway Widths for New Streets and Widening",
+   "page_from": 246, "page_to": 246, "n_cols": 3, "n_rows": 8,
+   "spanning_header": null,
+   "header": ["Street Category", "Minimum Right-of-Way(1)", "Minimum Roadway(2)"]
+  },
+  {
+   "label": "9-B", "title": "Maximum Pipe Invert Depth",
+   "page_from": 262, "page_to": 262, "n_cols": 14, "n_rows": 11,
+   "spanning_header": "Maximum Pipe Invert Depth (feet)",
+   "header": ["Pipe Diameter (inches)", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"],
+   "note": "DB captured the TABLE TITLE as the header row. DB said 12 rows; source has 11."
+  },
+  {
+   "label": "12-A", "title": "Special Exceptions",
+   "page_from": 363, "page_to": 365, "n_cols": 2, "n_rows": 17,
+   "spanning_header": null,
+   "header": ["Special Exception", "Administrative Approval Parameters"],
+   "note": "NEVER EXTRACTED before. Spans three pages and must be stored as ONE table."
+  }
+ ],
+ "absent_tables": {
+  "6-C": "Does not exist in the UDC. Numbering gap.",
+  "6-D": "Does not exist in the UDC, but sections 605.05 and 605.06 both cite it. Dangling cross-reference; the content they describe is in Table 6-E."
+ }
+}

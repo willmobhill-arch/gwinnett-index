@@ -28,11 +28,30 @@ globalThis.fetch = async (input) => {
       source_url: 'https://example.test/aca', jurisdiction: { slug: 'unincorporated-gwinnett' } }]);
   }
   if (url.includes('/rest/v1/code_section?')) {
+    if (url.includes('Table')) return Response.json([]);   // tables fall through to code_table
     return Response.json([{ citation: 'Duluth UDC § 102.02', identifier: '102.02', title: 'Conflict with Other Regulations',
       body_md: 'a. Whenever the provisions...', adopted_date: '2025-09-08', amended_through: '2026-07-13',
       source_url: 'https://example.test/udc.pdf' }]);
   }
-  if (url.includes('/rest/v1/code_table?')) return Response.json([]);
+  if (url.includes('/rest/v1/code_table?')) {
+    // Two fragments under one citation, both defective: the UDC prints "Table 2-C"
+    // twice, and the cell values of both are known wrong.
+    if (url.includes('2-C')) {
+      return Response.json([
+        { citation: 'Duluth UDC Table 2-C', title: 'Principal Uses Allowed by Zoning District: Residential',
+          header: ['NAICS 2022', 'PRINCIPAL USES'], spanning_header: null, header_source: 'rendered-image',
+          rows: [['722511', 'Restaurant']], n_cols: 12, n_rows: 10, page_from: 56, page_to: 69,
+          quality: 'defective', verification_note: 'Cell values known wrong.',
+          source_url: 'https://example.test/udc.pdf' },
+        { citation: 'Duluth UDC Table 2-C', title: 'Principal Uses Allowed by Zoning District: Central Business, Commercial, Office and Industrial',
+          header: ['NAICS 2022', 'PRINCIPAL USES'], spanning_header: null, header_source: 'rendered-image',
+          rows: [], n_cols: 14, n_rows: 312, page_from: 70, page_to: 84,
+          quality: 'defective', verification_note: 'Cell values known wrong.',
+          source_url: 'https://example.test/udc.pdf' },
+      ]);
+    }
+    return Response.json([]);
+  }
   throw new Error(`unstubbed fetch: ${url}`);
 };
 
@@ -94,6 +113,21 @@ await t('get_code_section carries an effective date', async () => {
   const s = r.result.structuredContent;
   assert.equal(s.effective_date, '2026-07-13');
   assert.match(s.note, /Cite the effective date/);
+});
+
+await t('a defective table withholds its cells and names its sibling fragment', async () => {
+  // Two bugs in one assertion. The site withheld unverified cell values and this
+  // endpoint served them, so the same corpus gave opposite answers about whether
+  // the numbers could be trusted -- via the surface agents actually call. And a
+  // citation does not identify a table: answering "Table 2-C" with the first of
+  // two fragments, silently, returns half an answer shaped like a whole one.
+  const r = await rpc({ jsonrpc: '2.0', id: 11, method: 'tools/call',
+    params: { name: 'get_code_section', arguments: { jurisdiction: 'duluth', citation: 'Duluth UDC Table 2-C' } } });
+  const s = r.result.structuredContent;
+  assert.deepEqual(s.rows, [], 'defective cell values must never be served');
+  assert.match(s.warning, /KNOWN WRONG/);
+  assert.equal(s.also_matched.length, 1, 'the other fragment must be named');
+  assert.match(s.also_matched[0].title, /Central Business/);
 });
 
 await t('a failing tool returns isError, not a protocol error', async () => {

@@ -110,8 +110,14 @@ def main() -> int:
     for s in secs:
         s["jurisdiction"] = (s.get("jurisdiction") or {}).get("slug")
 
+    # spanning_header and header_source were added after this select was written and
+    # were silently dropped for a release -- the same shape as the motion_action bug,
+    # where a column existed, held the truth, and never reached a page. A spanning
+    # label is not decoration: without "Weekdays | Weekends | Nighttime" above it,
+    # Table 4-A shows "6 am to 5 pm" twice and means nothing.
     tabs = fetch_all("code_table",
-        "citation,title,header,rows,n_cols,n_rows,page_from,page_to,quality,"
+        "citation,title,header,spanning_header,header_source,rows,n_cols,n_rows,"
+        "page_from,page_to,quality,"
         "verification_note,source_url,jurisdiction:jurisdiction_id(slug)",
         "page_from.asc,citation.asc")
     for t in tabs:

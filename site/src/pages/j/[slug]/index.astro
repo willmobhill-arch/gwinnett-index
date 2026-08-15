@@ -2,7 +2,7 @@
 import Base from '../../../layouts/Base.astro';
 import Governing from '../../../components/Governing.astro';
 import { jurisdictions, casesFor, codeTables, bySlug } from '../../../lib/source';
-import { num, date, zone, rawCode, casePath, codeSlug } from '../../../lib/format';
+import { num, date, zone, rawCode, casePath, tableSlug } from '../../../lib/format';
 import { abs } from '../../../lib/site';
 
 export function getStaticPaths() {
@@ -86,9 +86,12 @@ const jsonld = {
       <ul class="plain">
         {tables.map((t) => (
           <li>
-            <a href={`/code/${j.slug}/${codeSlug(t.citation)}`}>{t.citation}</a>
+            <a href={`/code/${j.slug}/${tableSlug(t)}`}>{t.citation}</a>
             {' '}<span class="sub">{t.title}</span>
-            {t.quality !== 'verified' && <span class="sub"> — unverified extraction</span>}
+            {t.quality === 'defective' && (
+              <span class="sub"> — header verified, cell values known wrong and withheld</span>
+            )}
+            {t.quality === 'unverified' && <span class="sub"> — unverified extraction</span>}
           </li>
         ))}
       </ul>

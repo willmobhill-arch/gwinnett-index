@@ -160,22 +160,41 @@ export async function getCodeSection(env: Env, jurisdiction: string, citation: s
   }
 
   const tabs = await db.select<any>(
-    `code_table?select=citation,title,header,rows,n_cols,n_rows,page_from,page_to,quality,` +
+    `code_table?select=citation,title,header,spanning_header,header_source,rows,n_cols,n_rows,` +
+      `page_from,page_to,quality,` +
       `verification_note,source_url,last_verified` +
-      `&jurisdiction_id=eq.${id}&citation.ilike=*${encodeURIComponent(bare)}*&limit=3`
+      `&jurisdiction_id=eq.${id}&citation.ilike=*${encodeURIComponent(bare)}*` +
+      `&order=page_from.asc&limit=3`
   );
   if (!tabs.length) throw new HttpError(404, `no section or table matching "${citation}" in ${jurisdiction}`);
   const t = tabs[0];
   return {
     jurisdiction: { slug: j[0].slug, name: j[0].name },
     ...t,
+    // The site withholds unverified cell values; this served them. Same corpus,
+    // two surfaces, opposite answers about whether the numbers can be trusted --
+    // and the one that handed them over was the one agents call.
+    rows: t.quality === 'verified' ? t.rows : [],
     warning:
       t.quality === 'verified'
         ? `Verified: ${t.verification_note}`
-        : 'UNVERIFIED EXTRACTION. This table was recovered from the PDF programmatically and ' +
-          'has never been checked cell-by-cell against the rendered source page. Table ' +
-          'extraction fails quietly — a value can land in the wrong column and still look ' +
-          'plausible. Do not present these numbers as authoritative; open source_url.',
+        : t.quality === 'defective'
+          ? 'CELL VALUES KNOWN WRONG AND WITHHELD. The header, column count and page range of ' +
+            'this table were checked against the rendered source page; the cell values came from ' +
+            'an extractor that mis-assigned columns. This is stronger than "unverified" — the ' +
+            `numbers are known to be incorrect. Open source_url. ${t.verification_note ?? ''}`
+          : 'UNVERIFIED EXTRACTION. This table was recovered from the PDF programmatically and ' +
+            'has never been checked cell-by-cell against the rendered source page. Table ' +
+            'extraction fails quietly — a value can land in the wrong column and still look ' +
+            `plausible. Cell values are withheld. Open source_url. ${t.verification_note ?? ''}`,
+    // A citation does not identify a table. The UDC prints "Table 2-C" twice --
+    // residential districts on p56, commercial on p70 -- so answering with the
+    // first match and saying nothing hands back half the answer as if it were all
+    // of it.
+    also_matched: tabs.length > 1
+      ? tabs.slice(1).map((x: any) => ({ citation: x.citation, title: x.title,
+                                         page_from: x.page_from, page_to: x.page_to }))
+      : undefined,
     as_of: stamp(),
   };
 }

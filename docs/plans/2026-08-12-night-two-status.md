@@ -20,7 +20,7 @@ looked different afterwards.
 
 The fix was not to hide the key. It was to make the key harmless.
 
-`20260812170000_public_read_only_rls.sql` — RLS on all 14 project tables, `SELECT`
+`20260812173957_public_read_only_rls.sql` — RLS on all 14 project tables, `SELECT`
 granted to `anon` and `authenticated`, writes revoked at the grant level as well as the
 policy level. Ingestion is unaffected: every loader runs *inside* Postgres as the table
 owner, and RLS does not apply to the owner.
@@ -29,7 +29,7 @@ owner, and RLS does not apply to the owner.
 through `resolve_jurisdiction()`; `INSERT`, `UPDATE` and `DELETE` each raise
 `insufficient_privilege`. Resolver fixture re-scored after: 1,546/1,546, unchanged.
 
-`20260812170500_tighten_view_and_function_security.sql` — three more things the linter
+`20260812174553_tighten_view_and_function_security.sql` — three more things the linter
 surfaced once RLS was on:
 
 - `developer_activity` was a **SECURITY DEFINER view**, so it ran with the creator's

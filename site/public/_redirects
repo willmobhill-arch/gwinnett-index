@@ -1,0 +1,12 @@
+# Splitting "Table 2-C" into its two printed fragments changed two URLs that were
+# already published. The UDC prints the citation twice -- residential districts on
+# p56 and commercial on p70 -- and the single /table-2-c page only ever served the
+# residential half, so that is where the old URL points. The commercial fragment
+# had no URL at all before.
+#
+# These are citable legal-reference URLs; a 404 on one is worse than a redirect
+# that lands a reader one click from where they meant to be.
+/code/duluth/table-2-c    /code/duluth/table-2-c-residential    301
+/code/duluth/table-2-c.md /code/duluth/table-2-c-residential.md 301
+/code/duluth/table-2-d    /code/duluth/table-2-d-residential    301
+/code/duluth/table-2-d.md /code/duluth/table-2-d-residential.md 301

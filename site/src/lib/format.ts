@@ -49,6 +49,28 @@ export const codeSlug = (citation: string) => {
     : tail.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 };
 
+/**
+ * URL segment for a code *table*.
+ *
+ * A citation is not unique for tables. The UDC prints "Table 2-C" twice — once
+ * for residential districts (p56) and once for commercial (p70) — and the same
+ * for 2-D. Keying the route on the citation alone gave both fragments the same
+ * URL, and the de-dup guard in `routes.ts` then dropped the second one: the
+ * commercial half of the table that answers "can I put this use here" had no
+ * page at all, and nothing in the build said so.
+ *
+ * The source's own discriminator is the subtitle after the colon, so use that.
+ * Tables with no colon in the title are unaffected and keep their existing URL.
+ */
+export const tableSlug = (t: { citation: string; title: string | null }) => {
+  const base = codeSlug(t.citation);
+  const i = (t.title ?? '').lastIndexOf(':');
+  if (i < 0) return base;
+  const suffix = t.title!.slice(i + 1).toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return suffix ? `${base}-${suffix}` : base;
+};
+
 
 /**
  * A decision and the motion it applied to, together.

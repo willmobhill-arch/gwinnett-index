@@ -34,14 +34,14 @@ Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
 | `land_use_case` | 11,848 — 11,739 county ArcGIS + 109 Duluth agenda-mined |
 | `applicant` | 7,369 resolved from 8,246 raw spellings |
 | `code_section` | 858 Duluth UDC sections |
-| `code_table` | 18 (only Table 2-B is `quality='verified'`) |
+| `code_table` | 20 — 7 `verified`, 12 `defective`, 1 `unverified` |
 | `meeting_document` | 353 |
 | `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
 
-Built: `db/migrations/` (23, md5-verified against the live project), `site/`
-(Astro, 15,236 pages from the real corpus, full agent surface, 18 build gates),
-`worker/` (REST + MCP, 5 tools, 10 protocol tests), deployed as Workers Static
-Assets with the Worker scoped to `/v1/*` and `/mcp`.
+Built: `db/migrations/` (32, md5-verified against the live project by
+`db/verify_migrations.py`), `site/` (Astro, 15,234 pages from the real corpus, full
+agent surface, 22 build gates), `worker/` (REST + MCP, 5 tools, 11 protocol tests),
+deployed as Workers Static Assets with the Worker scoped to `/v1/*` and `/mcp`.
 
 Duluth minutes are OCR'd and loaded: 13.9 M characters of meeting text in the
 database, 74 of 110 Duluth cases with a decision, 68 bound directly to the motion
@@ -199,6 +199,29 @@ not by an error.
   SU2025-004 was approved by the PC and DENIED by Council, and was recorded as
   approved. Rank by evidence quality first (a motion that names its case beats a
   vote merely near one), then recency, and move all decision fields as a set.
+- **A citation is not a unique key.** The UDC prints "Table 2-C" twice — residential
+  districts on p56, commercial on p70 — and every table also exists a second time as
+  a `code_section` row holding the prose around it. Routing on citation alone made
+  four records collide; a de-dup guard resolved each collision by keeping whichever
+  came first, so `/code/duluth/table-2-b` was a real, well-formed page that did not
+  contain Table 2-B. The hand-verified 20-row table was on no page at all.
+- **A gate that checks a file exists is not checking the file.** The gate above
+  passed while that was true, because the page existed — built by the *other* record.
+  Assert the content, not the path.
+- **A title that wraps loses its second line.** Table 7-C is "Minimum Distances in
+  Feet Required between Trees" *and Structures or Infrastructure by Tree Canopy Size
+  Category*. Truncated at the line break it is still grammatical, still plausible,
+  and has lost the subject of the table.
+- **Two surfaces, one corpus, opposite answers.** The site withheld unverified cell
+  values; `worker/src/tools.ts` spread the row and served them — over the surface
+  agents actually call. Withholding has to happen once, where the data is shaped.
+- **Migrations applied but never committed.** Three of them (`resolver_score_function`,
+  `resolver_score_cache`, `duluth_loader_latest_decision_wins`) lived only in the
+  database for days. Nothing broke, because production already had them; the damage
+  waits for a rebuild. Worse, repo filename order did not match apply order, so
+  replaying `db/migrations/` would have applied the date-only decision precedence
+  *after* the evidence-ranked one and quietly restored SU2025-004 to "approved".
+  `db/verify_migrations.py` now diffs files against the ledger by name and md5.
 - **Check the "other"/unclassified bucket.** Nearly every silent bug above was
   found by looking at what failed to classify.
 - **A file size that doesn't add up is a bug signal.** 3.3 MB for 274 records of
@@ -233,9 +256,25 @@ GROUP BY 1;
 
 ## Known gaps
 
-- **17 of 18 UDC tables are unverified.** Only Table 2-B has been checked against
-  the source page, and even its merged PUD/CBD rows are unreliable. Their cell
-  values are withheld from the published snapshot by design.
+- **12 of 20 UDC tables are `defective` and 1 is `unverified`.** All 20 now have a
+  header, column count and page range checked against the rendered page and pinned
+  in `tests/fixtures/duluth_udc_tables.json`, which a build gate enforces. What is
+  outstanding is *cell values*: `defective` means checked and known wrong, so those
+  cells are withheld everywhere — snapshot, site and API alike. `n_rows` on a
+  defective table is the true source count, so this query is the live worklist:
+
+```sql
+SELECT citation, n_rows AS should_have, jsonb_array_length(rows) AS actually_has
+FROM code_table
+WHERE quality = 'defective' AND n_rows IS DISTINCT FROM jsonb_array_length(rows);
+```
+
+  It does **not** catch everything: the fixture leaves `n_rows` null for 2-C (both
+  fragments), 2-D commercial and 4-B because nobody counted the source rows, and the
+  stored `n_rows` for those is the old extractor's own count. 2-C Residential reads
+  10/10 and looks reconciled; the source has roughly 368.
+- **Table 12-A has a verified header and no cells at all** — 17 rows of prose
+  awaiting transcription. It is the one `unverified` table.
 - **262 applicant merge candidates await human review** in
   `applicant_merge_candidate` (`decision='pending'`). Developer counts are lower
   bounds.
@@ -273,8 +312,10 @@ Deployment, the crawler check and the registry listing are all done. What remain
    older corpus with every page rendering perfectly.
 3. Minutes parser round two: ~36 of 110 Duluth cases still have no outcome, and the
    votes are in text that is now in the database.
-4. Verify more UDC tables against their rendered pages; 17 of 18 are unverified and
-   their cell values are withheld from the snapshot by design.
+4. Reload the 12 `defective` tables' cell values, then Table 12-A's 17 prose rows.
+   Headers and page ranges are already verified and gated; only cells are missing.
+   `ingest/pdf/` (extract_tables + resolve_headers) is the extractor, still standalone
+   — wiring it into `ingest/adapters/base.py` as the `pdf_code` adapter is step one.
 5. Only then widen: Peachtree Corners and Norcross are mostly config.
 
 ## Style

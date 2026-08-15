@@ -94,8 +94,17 @@ export interface CodeSection {
 
 export interface CodeTable {
   citation: string; jurisdiction: string; title: string | null; header: string[] | null;
+  /** A label sitting above and across several columns — "Weekdays | Weekends |
+   *  Nighttime" over Table 4-A's six. Without it the header reads "6 am to 5 pm"
+   *  twice and means nothing, so it is a separate field, not decoration. */
+  spanning_header: string | null;
+  /** rendered-image (hand-checked) | geometry | markdown | legacy */
+  header_source: string | null;
   rows: string[][] | null; n_cols: number | null; n_rows: number | null;
   page_from: number | null; page_to: number | null;
+  /** verified = checked cell-by-cell against the rendered page.
+   *  defective = checked and known wrong; header is right, cells are not.
+   *  unverified = not yet checked. */
   quality: string | null; verification_note: string | null; source_url: string;
 }
 

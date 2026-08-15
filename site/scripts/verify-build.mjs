@@ -243,6 +243,136 @@ if (leaky.length) {
   ok.push('no "undefined" or "NaN" in any rendered page');
 }
 
+// ------------------------------------------- UDC tables vs the hand-verified fixture
+// tests/fixtures/duluth_udc_tables.json was transcribed by eye from rendered page
+// images. It is the ground truth for what the UDC actually prints, and this gate is
+// what makes it load-bearing rather than a document nobody re-reads.
+//
+// It exists because every defect in code_table was silent: Table 2-C carried the
+// *commercial* header over residential districts, 4-C and 12-A were never extracted
+// at all, and 2-B sat at quality='verified' while missing a quarter of its rows. All
+// of those render as a perfectly ordinary page.
+//
+// n_rows in the fixture is null where the source count was never hand-counted. Null
+// means "not asserted" and must not be read as zero — asserting a count nobody
+// counted is the bug this whole file exists to prevent.
+const SNAP = process.env.SNAPSHOT_DIR
+  ? path.resolve(process.env.SNAPSHOT_DIR)
+  : path.resolve('..', 'data', 'snapshot');
+const usingFixtures = !fs.existsSync(path.join(SNAP, 'jurisdictions.json'));
+const tablesPath = path.join(usingFixtures ? path.resolve('fixtures') : SNAP, 'code_tables.json');
+const truthPath = path.resolve('..', 'tests', 'fixtures', 'duluth_udc_tables.json');
+
+if (!fs.existsSync(truthPath)) {
+  fail.push(`missing ground-truth fixture ${truthPath}`);
+} else {
+  const truth = JSON.parse(fs.readFileSync(truthPath, 'utf8'));
+  const published = JSON.parse(fs.readFileSync(tablesPath, 'utf8'))
+    .filter((t) => /UDC Table /.test(t.citation));
+  const key = (label, title) => `${label} ${title ?? ''}`;
+  const byKey = new Map(
+    published.map((t) => [key(t.citation.replace(/^.*UDC Table\s*/, ''), t.title), t])
+  );
+
+  const diffs = [];
+  for (const t of truth.tables) {
+    const got = byKey.get(key(t.label, t.title));
+    if (!got) {
+      // In fixture mode only a handful of tables ship, so absence is expected.
+      if (!usingFixtures) diffs.push(`${t.label} "${t.title}" is in the fixture but not published`);
+      continue;
+    }
+    const cmp = (field, want, have) => {
+      if (want === null || want === undefined) return;      // not asserted
+      if (JSON.stringify(want) !== JSON.stringify(have))
+        diffs.push(`${t.label} ${field}: fixture ${JSON.stringify(want)} vs published ${JSON.stringify(have)}`);
+    };
+    cmp('n_cols', t.n_cols, got.n_cols);
+    cmp('n_rows', t.n_rows, got.n_rows);
+    cmp('header', t.header, got.header);
+    cmp('spanning_header', t.spanning_header, got.spanning_header ?? null);
+    cmp('page_from', t.page_from, got.page_from);
+    cmp('page_to', t.page_to, got.page_to);
+    if (Array.isArray(t.row_keys) && Array.isArray(got.rows) && got.rows.length)
+      cmp('row_keys', t.row_keys, got.rows.map((r) => r[0]));
+  }
+  // The other direction: a table nobody transcribed is a table nobody checked.
+  if (!usingFixtures) {
+    const known = new Set(truth.tables.map((t) => key(t.label, t.title)));
+    for (const [k, t] of byKey)
+      if (!known.has(k)) diffs.push(`${t.citation} "${t.title}" is published but absent from the ground-truth fixture`);
+  }
+
+  if (diffs.length) {
+    fail.push(`UDC tables disagree with the hand-verified fixture (${diffs.length}): ${diffs.slice(0, 6).join(' | ')}`);
+  } else {
+    ok.push(
+      `${byKey.size} UDC table(s) match tests/fixtures/duluth_udc_tables.json` +
+      `${usingFixtures ? ' (fixture mode — sample only)' : ''}`
+    );
+  }
+
+  // Every published table needs its own page. Citations are NOT unique: the UDC
+  // prints "Table 2-C" twice, and keying the route on citation alone silently
+  // dropped the commercial half -- the route de-dup guard swallowed it without a
+  // word. Count pages, not intentions.
+  const tablePages = published.map((t) => {
+    const cite = t.citation.replace(/^.*?UDC\s*/i, '').trim();
+    const base = cite.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const i = (t.title ?? '').lastIndexOf(':');
+    const suffix = i < 0 ? '' : t.title.slice(i + 1).toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `/code/${t.jurisdiction}/${suffix ? `${base}-${suffix}` : base}`;
+  });
+  const distinct = new Set(tablePages);
+  const absent = [...distinct].filter((p) => !exists(path.join(p, 'index.html')) || !exists(`${p}.md`));
+  // Existence is not enough, and checking only existence is how this gate passed
+  // while lying. Every table also has a prose code_section row under the SAME
+  // citation; the section won the URL and the structured table was dropped, so
+  // /code/duluth/table-2-b was a real, well-formed page that did not contain
+  // Table 2-B. Assert the twin actually carries the table's own content.
+  const contentless = published.filter((t, i) => {
+    const f = `${tablePages[i]}.md`;
+    if (!exists(f)) return false;                       // reported by `absent`
+    const twin = read(f);
+    return !(t.quality === 'verified'
+      ? /^## Table$/m.test(twin)                        // header + cells published
+      : /^## Columns$/m.test(twin));                    // header only, cells withheld
+  });
+  if (distinct.size !== published.length) {
+    fail.push(
+      `${published.length} code tables collapse to ${distinct.size} routes — ` +
+      'a table shares a URL with another and one of them will never be published'
+    );
+  } else if (absent.length) {
+    fail.push(`code table route(s) missing from dist: ${absent.slice(0, 4).join(', ')}`);
+  } else if (contentless.length) {
+    fail.push(
+      `${contentless.length} code table page(s) exist but do not carry their table: ` +
+      `${contentless.slice(0, 4).map((t) => t.citation).join(', ')} — another record ` +
+      'with the same citation is occupying the URL'
+    );
+  } else {
+    ok.push(`${published.length} code tables have ${distinct.size} distinct pages, each carrying its own table`);
+  }
+
+  // Tables the UDC cites but does not contain. An agent asking about Table 6-D
+  // should be told it does not exist, which only works if the corpus says so.
+  const corpusText = corpus;
+  const unsurfaced = Object.keys(truth.absent_tables ?? {})
+    .filter((label) => !new RegExp(`Table ${label}\\b`).test(corpusText));
+  if (usingFixtures) {
+    warn.push('absent-table cross-references not checked (fixture mode)');
+  } else if (unsurfaced.length) {
+    fail.push(
+      `the UDC cites Table ${unsurfaced.join(', ')} but the published corpus never says ` +
+      'they do not exist; an agent asked about them gets silence, not an answer'
+    );
+  } else {
+    ok.push(`non-existent tables (${Object.keys(truth.absent_tables ?? {}).join(', ')}) are named in the corpus`);
+  }
+}
+
 // ------------------------------------------------------------------ report
 for (const o of ok) console.log(`  ok    ${o}`);
 for (const w of warn) console.log(`  warn  ${w}`);

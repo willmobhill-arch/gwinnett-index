@@ -2,7 +2,7 @@
 import Base from '../../../layouts/Base.astro';
 import Governing from '../../../components/Governing.astro';
 import { codeSections, codeTables, jurisdictions, bySlug } from '../../../lib/source';
-import { num, codeSlug } from '../../../lib/format';
+import { num, codeSlug, tableSlug } from '../../../lib/format';
 
 export function getStaticPaths() {
   const withCode = new Set([...codeSections(), ...codeTables()].map((x) => x.jurisdiction));
@@ -10,7 +10,7 @@ export function getStaticPaths() {
 }
 const { jurisdiction } = Astro.params;
 const j = bySlug(jurisdiction!)!;
-const secs = codeSections().filter((s) => s.jurisdiction === j.slug);
+const secs = codeSections().filter((s) => s.jurisdiction === j.slug && s.kind !== 'table');
 const tabs = codeTables().filter((t) => t.jurisdiction === j.slug);
 
 const byArticle = new Map<string, typeof secs>();
@@ -49,11 +49,13 @@ const adopted = secs[0]?.adopted_date, amended = secs[0]?.amended_through;
       <ul class="plain">
         {tabs.map((t) => (
           <li>
-            <a href={`/code/${j.slug}/${codeSlug(t.citation)}`}>{t.citation}</a>{' '}
+            <a href={`/code/${j.slug}/${tableSlug(t)}`}>{t.citation}</a>{' '}
             <span class="sub">{t.title}
               {t.quality === 'verified'
                 ? ' — verified against the rendered page'
-                : ' — extracted, never checked against the source page'}</span>
+                : t.quality === 'defective'
+                  ? ' — header verified, cell values known wrong and withheld'
+                  : ' — extracted, never checked against the source page'}</span>
           </li>
         ))}
       </ul>

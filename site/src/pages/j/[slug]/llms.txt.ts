@@ -1,7 +1,7 @@
 import type { APIRoute, GetStaticPaths } from 'astro';
 import { jurisdictions, casesFor, codeSections, codeTables } from '../../../lib/source';
 import { abs, TRAP } from '../../../lib/site';
-import { codeSlug } from '../../../lib/format';
+import { codeSlug, tableSlug } from '../../../lib/format';
 
 export const getStaticPaths: GetStaticPaths = () =>
   jurisdictions().map((j) => ({ params: { slug: j.slug }, props: { j } }));
@@ -9,7 +9,7 @@ export const getStaticPaths: GetStaticPaths = () =>
 export const GET: APIRoute = ({ props }) => {
   const j = (props as any).j as ReturnType<typeof jurisdictions>[number];
   const cs = casesFor(j.slug);
-  const secs = codeSections().filter((s) => s.jurisdiction === j.slug);
+  const secs = codeSections().filter((s) => s.jurisdiction === j.slug && s.kind !== 'table');
   const tabs = codeTables().filter((t) => t.jurisdiction === j.slug);
   const years = cs.length ? `${j.first_year}–${j.last_year}` : 'none';
 
@@ -44,7 +44,7 @@ For this jurisdiction specifically: ${j.kind === 'municipality'
 ## Pages
 
 - [Jurisdiction page](${abs(`/j/${j.slug}.md`)})
-${j.code_sections ? `- [Code index](${abs(`/code/${j.slug}.md`)})\n` : ''}${tabs.map((t) => `- [${t.citation}](${abs(`/code/${j.slug}/${codeSlug(t.citation)}.md`)}): ${t.title}${t.quality === 'verified' ? ' (verified)' : ' (UNVERIFIED extraction)'}`).join('\n')}
+${j.code_sections ? `- [Code index](${abs(`/code/${j.slug}.md`)})\n` : ''}${tabs.map((t) => `- [${t.citation}](${abs(`/code/${j.slug}/${tableSlug(t)}.md`)}): ${t.title}${t.quality === 'verified' ? ' (verified)' : t.quality === 'defective' ? ' (header verified; CELL VALUES KNOWN WRONG, withheld)' : ' (UNVERIFIED extraction)'}`).join('\n')}
 ${secs.slice(0, 20).map((s) => `- [${s.citation}](${abs(`/code/${j.slug}/${codeSlug(s.citation)}.md`)}): ${s.title ?? ''}`).join('\n')}
 `,
     { headers: { 'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*' } }
