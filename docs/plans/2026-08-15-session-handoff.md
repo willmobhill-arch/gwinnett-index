@@ -114,6 +114,50 @@ python3 -m ingest.adapters.pdf_code --plan duluth       # the SQL to run
 The loader is in-database and fetches the repo's own raw URL, so the file must be
 **committed and pushed before the load**, and `GWINDEX_REF` picks the branch.
 
+## Deploying this branch — exact commands
+
+The branch is verified and CI-green; only the deploy is outstanding. The live site
+still serves the pre-fix table pages (confirmed: `/code/duluth/table-2-b.md` returns
+zero rows of Table 2-B, `/code/duluth/table-2-c-residential` 404s).
+
+Needs `CLOUDFLARE_API_TOKEN` in the environment. **Environment variables are injected
+at container start**, so a variable added to the environment config mid-session is not
+visible to that session — start a fresh session and it will be there. Do not paste the
+token into the transcript; that is what put the previous one on the rotate list.
+
+Token permissions: Account → Workers Scripts → Edit; Account → Account Settings →
+Read; Zone → Workers Routes → Edit on `gwindex.net`.
+
+```bash
+cd /home/user/gwinnett-index
+SUPABASE_URL=https://losmnziukaqptxhqnhjh.supabase.co \
+SUPABASE_ANON_KEY=sb_publishable_zTtQd-fucarE5INRi3ANSw_xNUqO1gO \
+  python3 scripts/export_snapshot_rest.py
+
+cd site && npm ci && SITE_URL=https://www.gwindex.net npm run ci    # 22 gates must pass
+cd ../worker && npx wrangler deploy                                 # needs >= 4.34.0
+```
+
+`SUPABASE_ANON_KEY` is a publishable key and safe to hand around — RLS is on and
+SELECT-only, and the same key gets 401 on a write. `SUPABASE_ANON_KEY` on the Worker is
+a `wrangler secret`, which `deploy` preserves; the API and MCP survive a redeploy.
+
+Verify afterwards, and do not skip this — a deploy that uploads and serves the previous
+build looks identical to a successful one:
+
+```bash
+curl -s https://www.gwindex.net/code/duluth/table-2-b.md | grep -c '^| RA-200'   # want 1
+curl -so /dev/null -w '%{http_code}\n' https://www.gwindex.net/code/duluth/table-2-c-residential   # want 200
+curl -s https://www.gwindex.net/code/duluth/table-9-a.md | grep -c 'Local Street'            # want >= 1
+curl -sX POST https://www.gwindex.net/mcp -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | head -c 80                        # MCP alive
+```
+
+**The durable fix is CI.** `.github/workflows/site.yml` already carries a commented-out
+`deploy` job. Add `CLOUDFLARE_API_TOKEN` as a repository Actions secret and uncomment
+it, and deploys happen on merge to `main` with the credential never entering a
+transcript or a container again.
+
 ## Method notes — do not skip these
 
 - **Verify against the rendered page image, cell by cell.** `page.get_pixmap(dpi=200,
