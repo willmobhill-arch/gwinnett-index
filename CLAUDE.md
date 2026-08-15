@@ -34,14 +34,16 @@ Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
 | `land_use_case` | 11,848 — 11,739 county ArcGIS + 109 Duluth agenda-mined |
 | `applicant` | 7,369 resolved from 8,246 raw spellings |
 | `code_section` | 858 Duluth UDC sections |
-| `code_table` | 20 — 7 `verified`, 12 `defective`, 1 `unverified` |
+| `code_table` | 20 — 9 `verified`, 11 `unverified`, 0 `defective` |
 | `meeting_document` | 353 |
 | `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
 
-Built: `db/migrations/` (32, md5-verified against the live project by
+Built: `db/migrations/` (33, md5-verified against the live project by
 `db/verify_migrations.py`), `site/` (Astro, 15,234 pages from the real corpus, full
 agent surface, 22 build gates), `worker/` (REST + MCP, 5 tools, 11 protocol tests),
 deployed as Workers Static Assets with the Worker scoped to `/v1/*` and `/mcp`.
+`ingest/adapters/` holds the adapter contract with `pdf_code` as its first
+implementation; `tests/test_udc_tables.py` is the extractor's regression suite.
 
 Duluth minutes are OCR'd and loaded: 13.9 M characters of meeting text in the
 database, 74 of 110 Duluth cases with a decision, 68 bound directly to the motion
@@ -222,6 +224,38 @@ not by an error.
   replaying `db/migrations/` would have applied the date-only decision precedence
   *after* the evidence-ranked one and quietly restored SU2025-004 to "approved".
   `db/verify_migrations.py` now diffs files against the ledger by name and md5.
+- **Markdown tables lose the ruling, and the ruling is the data.** Every row-count
+  defect in the UDC corpus came from the markdown path mistaking something else for a
+  row: a worked *example* below Table 4-A with the same column count (16 rows for a
+  6-row table), text lines inside one ruled cell (9-A, 13 for 8), a spanning label
+  taken as the header so the header became data (3-A, 7-A, 9-B). `find_tables()` on
+  the drawn grid gets all of them right.
+- **The UDC draws double borders, so every column counts twice.** 9-B reads as 28
+  columns wide for a 14-column table. `snap_x_tolerance=8` — calibrated against seven
+  hand-verified counts, where 6 and 10 also work, 2 fails everything, and 14 collapses
+  9-B to 11.
+- **A rule that does not span the table is not a row boundary.** 2-B's CBD row stacks
+  Single-family / Townhouse / Apartment inside its setback columns. Measured, real row
+  boundaries span 0.75–1.00 of the table width and in-cell divisions span 0.11–0.34.
+  And the UDC draws no full-width lines at all — coverage has to be the *union* of the
+  per-cell segments, or every boundary looks like nothing.
+- **Pipeline stage order fails silently, in both directions.** Decide empty columns
+  before stripping the header or 2-D loses its NAICS column; strip the header before
+  folding in-cell divisions or Table 3-A's `0.5` arrives as
+  `"Measured in Horizontal\nFootcandles\n0.5"` — a real value with its own column
+  heading glued on top.
+- **`n_rows` has to mean one thing.** The fixture said 19 for Table 3-B, counting
+  printed *lines* in the label column; the table has 9 ruled rows. Every other entry
+  counted ruled rows. A DB CHECK ties `n_rows` to the stored row count, so two
+  conventions cannot both be right — the convention is now written into the fixture.
+- **Overwriting a note deletes the findings in it.** Reloading cells replaced Table
+  6-E's `verification_note` and took the Table 6-D ordinance defect with it. Caught by
+  the gate that asserts the corpus names the tables the UDC cites but does not
+  contain; findings that are not about extraction quality are now preserved explicitly.
+- **`python3 -m pkg.mod` runs the module twice under two names.** Once as `pkg.mod`
+  via the package `__init__`, once as `__main__`, each with its own module-level
+  state. A registry populated by one is empty in the other, and reports empty without
+  erroring.
 - **Check the "other"/unclassified bucket.** Nearly every silent bug above was
   found by looking at what failed to classify.
 - **A file size that doesn't add up is a bug signal.** 3.3 MB for 274 records of
@@ -256,25 +290,27 @@ GROUP BY 1;
 
 ## Known gaps
 
-- **12 of 20 UDC tables are `defective` and 1 is `unverified`.** All 20 now have a
-  header, column count and page range checked against the rendered page and pinned
-  in `tests/fixtures/duluth_udc_tables.json`, which a build gate enforces. What is
-  outstanding is *cell values*: `defective` means checked and known wrong, so those
-  cells are withheld everywhere — snapshot, site and API alike. `n_rows` on a
-  defective table is the true source count, so this query is the live worklist:
+- **11 of 20 UDC tables have unread cells.** Every table's column count, header,
+  page range and row count now matches `tests/fixtures/duluth_udc_tables.json`, and
+  the cells come from the ruled grid rather than markdown. Nothing is `defective`
+  any more — that flag asserted the stored values were *known wrong*, which stopped
+  being true when they were re-extracted. What is outstanding is that **nobody has
+  read most of the cells against the rendered page**, so they stay `unverified` and
+  their values are withheld from snapshot, site and API alike.
+
+  The extractor is worth trusting more than the flag suggests: it reproduces
+  **492 of 493 cells** of the seven independently hand-transcribed tables, and the
+  one disagreement is its own (a stray `(` trailing 2-B's `---(9)`). But agreement on
+  seven tables is not evidence about the other eleven, and 2-C alone is 333 rows.
+  The worklist is simply:
 
 ```sql
-SELECT citation, n_rows AS should_have, jsonb_array_length(rows) AS actually_has
-FROM code_table
-WHERE quality = 'defective' AND n_rows IS DISTINCT FROM jsonb_array_length(rows);
+SELECT citation, n_rows FROM code_table WHERE quality <> 'verified' ORDER BY n_rows;
 ```
 
-  It does **not** catch everything: the fixture leaves `n_rows` null for 2-C (both
-  fragments), 2-D commercial and 4-B because nobody counted the source rows, and the
-  stored `n_rows` for those is the old extractor's own count. 2-C Residential reads
-  10/10 and looks reconciled; the source has roughly 368.
-- **Table 12-A has a verified header and no cells at all** — 17 rows of prose
-  awaiting transcription. It is the one `unverified` table.
+  Verify against the rendered page, then add the table to `VERIFIED_AGAINST_RENDER`
+  in `ingest/pdf/publish_cells.py` — that dict is the only thing that promotes a
+  table, and adding a line to it is a claim that a person read the page.
 - **262 applicant merge candidates await human review** in
   `applicant_merge_candidate` (`decision='pending'`). Developer counts are lower
   bounds.
@@ -312,10 +348,9 @@ Deployment, the crawler check and the registry listing are all done. What remain
    older corpus with every page rendering perfectly.
 3. Minutes parser round two: ~36 of 110 Duluth cases still have no outcome, and the
    votes are in text that is now in the database.
-4. Reload the 12 `defective` tables' cell values, then Table 12-A's 17 prose rows.
-   Headers and page ranges are already verified and gated; only cells are missing.
-   `ingest/pdf/` (extract_tables + resolve_headers) is the extractor, still standalone
-   — wiring it into `ingest/adapters/base.py` as the `pdf_code` adapter is step one.
+4. Read the 11 `unverified` tables' cells against their rendered pages, smallest
+   first (5-A is 5 rows, 6-E is 12, 2-C is 333). `ingest/pdf/extract_cells.py`
+   produced them and `publish_cells.py` promotes them; the render is the authority.
 5. Only then widen: Peachtree Corners and Norcross are mostly config.
 
 ## Style
