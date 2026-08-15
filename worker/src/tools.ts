@@ -147,30 +147,48 @@ export async function getCodeSection(env: Env, jurisdiction: string, citation: s
       `adopted_date,amended_through,source_url,last_verified` +
       `&jurisdiction_id=eq.${id}&or=(identifier.eq.${encodeURIComponent(bare)},citation.ilike.*${encodeURIComponent(bare)})&limit=5`
   );
-  if (secs.length) {
-    const s = secs[0];
-    return {
-      jurisdiction: { slug: j[0].slug, name: j[0].name },
-      ...s,
-      effective_date: s.amended_through ?? s.adopted_date,
-      note: `Ordinance text mirrored in full. Cite the effective date (${s.amended_through ?? s.adopted_date}) with any figure taken from this section.`,
-      also_matched: secs.length > 1 ? secs.slice(1).map((x) => x.citation) : undefined,
-      as_of: stamp(),
-    };
-  }
 
+  // Tables are looked up BEFORE returning a section, not after. Every UDC table has a
+  // code_section twin under the same citation holding the prose printed around it, and
+  // that twin matched first -- so asking for "Table 9-A" returned the prose with no
+  // header, no cells and no quality flag, and looked like a complete answer. The site
+  // hit the identical bug and served a page for Table 2-B that did not contain it.
   const tabs = await db.select<any>(
     `code_table?select=citation,title,header,spanning_header,header_source,rows,n_cols,n_rows,` +
       `page_from,page_to,quality,` +
       `verification_note,source_url,last_verified` +
-      `&jurisdiction_id=eq.${id}&citation.ilike=*${encodeURIComponent(bare)}*` +
+      // PostgREST spells this `column=ilike.value`, not `column.ilike=value`. The
+      // latter parses as a filter on a column named "citation.ilike" and returns
+      // PGRST100 -- so this branch had never once run to completion, and no table
+      // has ever been served over the API or MCP.
+      `&jurisdiction_id=eq.${id}&citation=ilike.*${encodeURIComponent(bare)}*` +
       `&order=page_from.asc&limit=3`
   );
-  if (!tabs.length) throw new HttpError(404, `no section or table matching "${citation}" in ${jurisdiction}`);
+  if (!tabs.length) {
+    if (secs.length) {
+      const s = secs[0];
+      return {
+        jurisdiction: { slug: j[0].slug, name: j[0].name },
+        ...s,
+        effective_date: s.amended_through ?? s.adopted_date,
+        note: `Ordinance text mirrored in full. Cite the effective date (${s.amended_through ?? s.adopted_date}) with any figure taken from this section.`,
+        also_matched: secs.length > 1 ? secs.slice(1).map((x: any) => x.citation) : undefined,
+        as_of: stamp(),
+      };
+    }
+    throw new HttpError(404, `no section or table matching "${citation}" in ${jurisdiction}`);
+  }
   const t = tabs[0];
+  // The prose printed around this table, when the corpus has it. Same citation AND
+  // same title: "Table 2-C" names two different tables in this document.
+  const prose = secs.find((x: any) => x.citation === t.citation && x.title === t.title);
   return {
     jurisdiction: { slug: j[0].slug, name: j[0].name },
     ...t,
+    body_md: prose?.body_md,
+    article: prose?.article,
+    article_title: prose?.article_title,
+    effective_date: prose?.amended_through ?? prose?.adopted_date,
     // The site withholds unverified cell values; this served them. Same corpus,
     // two surfaces, opposite answers about whether the numbers can be trusted --
     // and the one that handed them over was the one agents call.

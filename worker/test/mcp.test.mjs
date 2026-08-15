@@ -9,8 +9,10 @@ import worker from '../dist-test/index.js';
 const env = { SUPABASE_URL: 'https://stub.invalid', SUPABASE_ANON_KEY: 'stub-key' };
 
 const real = globalThis.fetch;
+const seenUrls = [];
 globalThis.fetch = async (input) => {
   const url = String(input);
+  seenUrls.push(url);
   if (url.includes('GC_AddressLocationService')) {
     return Response.json({ candidates: [{ address: '3175 PEACHTREE INDUSTRIAL BLVD', location: { x: -84.14, y: 34.0 } }] });
   }
@@ -28,6 +30,16 @@ globalThis.fetch = async (input) => {
       source_url: 'https://example.test/aca', jurisdiction: { slug: 'unincorporated-gwinnett' } }]);
   }
   if (url.includes('/rest/v1/code_section?')) {
+    // Every UDC table ALSO exists as a code_section row holding the prose printed
+    // around it, under the same citation. That twin is what shadowed the table.
+    if (url.includes('9-A')) {
+      return Response.json([{ citation: 'Duluth UDC Table 9-A',
+        title: 'Minimum Right-of-Way and Roadway Widths for New Streets and Widening',
+        article: '9', article_title: 'Project Design and Construction Standards',
+        body_md: 'Minimum widths for new construction shall be as shown...',
+        adopted_date: '2025-09-08', amended_through: '2026-07-13',
+        source_url: 'https://example.test/udc.pdf' }]);
+    }
     if (url.includes('Table')) return Response.json([]);   // tables fall through to code_table
     return Response.json([{ citation: 'Duluth UDC § 102.02', identifier: '102.02', title: 'Conflict with Other Regulations',
       body_md: 'a. Whenever the provisions...', adopted_date: '2025-09-08', amended_through: '2026-07-13',
@@ -36,6 +48,16 @@ globalThis.fetch = async (input) => {
   if (url.includes('/rest/v1/code_table?')) {
     // Two fragments under one citation, both defective: the UDC prints "Table 2-C"
     // twice, and the cell values of both are known wrong.
+    if (url.includes('9-A')) {
+      return Response.json([{ citation: 'Duluth UDC Table 9-A',
+        title: 'Minimum Right-of-Way and Roadway Widths for New Streets and Widening',
+        header: ['Street Category', 'Minimum Right-of-Way(1)', 'Minimum Roadway(2)'],
+        spanning_header: null, header_source: 'rendered-image',
+        rows: [['Principal Arterial', '120-150 feet', '6 thru lanes with median']],
+        n_cols: 3, n_rows: 8, page_from: 246, page_to: 246,
+        quality: 'verified', verification_note: 'Checked against rendered p246.',
+        source_url: 'https://example.test/udc.pdf' }]);
+    }
     if (url.includes('2-C')) {
       return Response.json([
         { citation: 'Duluth UDC Table 2-C', title: 'Principal Uses Allowed by Zoning District: Residential',
@@ -128,6 +150,32 @@ await t('a defective table withholds its cells and names its sibling fragment', 
   assert.match(s.warning, /KNOWN WRONG/);
   assert.equal(s.also_matched.length, 1, 'the other fragment must be named');
   assert.match(s.also_matched[0].title, /Central Business/);
+});
+
+await t('a table is not shadowed by its prose twin, and is queried with valid syntax', async () => {
+  // Two live bugs in one assertion, neither of which any existing test could see.
+  //
+  // The prose code_section row under the same citation matched first and returned,
+  // so asking for Table 9-A gave back prose with no header, no cells and no quality
+  // flag -- an answer that looked complete. And the table query spelled the filter
+  // `citation.ilike=v` instead of `citation=ilike.v`, which PostgREST reads as a
+  // column literally named "citation.ilike" and rejects with PGRST100. That branch
+  // had therefore never run to completion: no table had ever been served over the
+  // API or MCP at all.
+  seenUrls.length = 0;
+  const r = await rpc({ jsonrpc: '2.0', id: 12, method: 'tools/call',
+    params: { name: 'get_code_section', arguments: { jurisdiction: 'duluth', citation: 'Duluth UDC Table 9-A' } } });
+  const s = r.result.structuredContent;
+  assert.equal(s.quality, 'verified', 'must answer with the TABLE record, not its prose twin');
+  assert.equal(s.rows.length, 1, 'a verified table must serve its cells');
+  assert.ok(s.header?.length, 'the header must come back with the cells');
+  assert.match(s.body_md, /Minimum widths/, 'the prose around the table is carried too');
+
+  const tableQuery = seenUrls.find((u) => u.includes('code_table?'));
+  assert.ok(tableQuery, 'the table must actually be queried');
+  assert.ok(tableQuery.includes('citation=ilike.'),
+    `PostgREST spells this column=ilike.value; got ${tableQuery}`);
+  assert.ok(!tableQuery.includes('citation.ilike='), 'the invalid spelling must not return');
 });
 
 await t('a failing tool returns isError, not a protocol error', async () => {
