@@ -6,7 +6,13 @@ import { defineConfig } from 'astro/config';
 // site origin is an explicit input rather than something inferred at request
 // time, and a build that forgot to set it says so instead of shipping
 // localhost URLs into a public catalogue.
-const SITE_URL = process.env.SITE_URL ?? 'http://localhost:4321';
+//
+// `?? ` is not enough: GitHub Actions writes `SITE_URL: ${{ vars.SITE_URL }}` as an
+// EMPTY STRING when the variable is unset, which is "set" as far as ?? is
+// concerned. Astro then rejects `site: ''` with "Invalid url" and the whole build
+// fails on a repo that simply has not configured a domain yet. Treat empty as
+// absent, which is what it means.
+const SITE_URL = process.env.SITE_URL || 'http://localhost:4321';
 if (!process.env.SITE_URL) {
   console.warn(
     '\n  SITE_URL is not set — building with ' + SITE_URL + '.\n' +
