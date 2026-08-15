@@ -20,10 +20,17 @@ jobs:
     # name, was therefore always false, and the export never ran. Every build
     # here fell back to site/fixtures, and the gates downgrade to warnings in
     # fixture mode rather than failing. Green, and building a ten-record sample.
+    # `vars.X || secrets.X` on the two non-secret names: Variables and Secrets are
+    # separate namespaces, and a value put in the wrong one reads as empty rather
+    # than erroring. That cost a red build already -- SUPABASE_URL and SITE_URL
+    # were set as secrets, so `vars.*` saw nothing and the export died on
+    # "set SUPABASE_URL and SUPABASE_ANON_KEY". Accepting either removes the
+    # footgun. Variables are still preferable: a secret is masked as *** in logs,
+    # which makes a URL needlessly unreadable in the verify output below.
     env:
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SITE_URL: ${{ vars.SITE_URL }}
+      SITE_URL: ${{ vars.SITE_URL || secrets.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,8 +43,19 @@ jobs:
       # HTTP CONNECT proxy. This one is stdlib-only and needs no pip install.
       # Absent the key the build still runs, from fixtures -- that is what keeps
       # fork pull requests working.
+      # Exactly one of the pair set is always a mistake -- most likely the other
+      # went into the wrong namespace -- and it is worth failing on rather than
+      # quietly building the sample.
+      - name: Reject a half-configured export
+        if: ${{ (env.SUPABASE_URL == '') != (env.SUPABASE_ANON_KEY == '') }}
+        run: |
+          echo "SUPABASE_URL is $([ -n "${SUPABASE_URL:-}" ] && echo set || echo EMPTY)"
+          echo "SUPABASE_ANON_KEY is $([ -n "${SUPABASE_ANON_KEY:-}" ] && echo set || echo EMPTY)"
+          echo "Set both, or neither. Either Variables or Secrets works; see docs/DEPLOY.md."
+          exit 1
+
       - name: Export snapshot from Supabase
-        if: ${{ env.SUPABASE_ANON_KEY != '' }}
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != '' }}
         run: python3 scripts/export_snapshot_rest.py
 
       - name: Report the data source
@@ -95,10 +113,12 @@ jobs:
     concurrency:
       group: gwindex-production
       cancel-in-progress: false
+    # Variables or Secrets both work for the two non-secret names; see the note on
+    # the build job. Variables are preferable -- a secret is masked as *** in logs.
     env:
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SITE_URL: ${{ vars.SITE_URL }}
+      SITE_URL: ${{ vars.SITE_URL || secrets.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -193,7 +213,7 @@ jobs:
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
 
       # A deploy that uploads and then serves the PREVIOUS build looks identical
@@ -259,11 +279,22 @@ jobs:
     # browser while it happens -- which would defeat the entire premise of this
     # index without leaving a trace anywhere a human would look.
     runs-on: ubuntu-latest
-    if: ${{ vars.SITE_URL != '' }}
+    # The gate is on the STEP, not the job. It used to be a job-level
+    # `if: vars.SITE_URL != ''`, which meant an unset SITE_URL skipped the whole
+    # job -- and a skipped job reads as "fine" in the checks list. This check had
+    # therefore never once run, while DEPLOY.md described it as running on every
+    # push and weekly. A job-level `if` also cannot see `secrets` or `env` at all,
+    # so the fallback below is only expressible at step level.
+    env:
+      SITE_URL: ${{ vars.SITE_URL || secrets.SITE_URL }}
     steps:
+      - name: Warn when the crawler check cannot run
+        if: ${{ env.SITE_URL == '' }}
+        run: |
+          echo "::warning title=AI-crawler check skipped::SITE_URL is unset, so Bot Fight Mode was not checked."
+
       - name: Assert 200 for AI crawler user-agents
-        env:
-          SITE_URL: ${{ vars.SITE_URL }}
+        if: ${{ env.SITE_URL != '' }}
         run: |
           set -u
           fail=0
