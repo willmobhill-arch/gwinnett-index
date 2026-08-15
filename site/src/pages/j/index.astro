@@ -1,0 +1,42 @@
+---
+import Base from '../../layouts/Base.astro';
+import { jurisdictions } from '../../lib/source';
+import { num, kindLabel } from '../../lib/format';
+
+const js = jurisdictions();
+const order = { unincorporated: 0, county: 1, municipality: 2 } as const;
+js.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
+---
+<Base title="Jurisdictions" description="All 19 jurisdictions indexed for Gwinnett County, Georgia." twin="/j.md">
+  <h1>Jurisdictions</h1>
+  <p class="lede">
+    Nineteen rows: Gwinnett County as a container, unincorporated Gwinnett as a first-class
+    jurisdiction in its own right, and the 17 incorporated places.
+  </p>
+  <p>
+    Unincorporated is derived geometrically — the county boundary minus the union of all 17
+    cities — rather than inferred by elimination. That is what lets the resolver say
+    “unincorporated” affirmatively instead of “not in any city we know about”.
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Jurisdiction</th><th>Kind</th><th>Sq mi</th><th>Cases</th><th>Code sections</th></tr></thead>
+      <tbody>
+        {js.map((j) => (
+          <tr>
+            <td><a href={`/j/${j.slug}`}>{j.name}</a></td>
+            <td>{kindLabel(j.kind)}</td>
+            <td>{j.sq_mi ?? '—'}</td>
+            <td>{num(j.cases)}</td>
+            <td>{num(j.code_sections)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p class="sub">
+    Cross-county municipalities — Braselton (4 counties), Auburn, Loganville and Rest Haven (2
+    each) — report their full incorporated area here, not just the share inside Gwinnett, so
+    these figures do not sum to the county total.
+  </p>
+</Base>

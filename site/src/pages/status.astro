@@ -1,0 +1,129 @@
+---
+import Base from '../layouts/Base.astro';
+import { stats, jurisdictions, usingFixtures } from '../lib/source';
+import { num } from '../lib/format';
+
+const s = stats();
+const js = jurisdictions();
+const r = s.resolver ?? {};
+const totalProbes = Object.values(r).reduce((a, b) => a + b.probes, 0);
+const totalCorrect = Object.values(r).reduce((a, b) => a + b.correct, 0);
+const withCode = js.filter((j) => j.code_sections > 0).length;
+const withCases = js.filter((j) => j.cases > 0).length;
+const dx = s.duluth_extraction;
+---
+<Base title="Status and freshness"
+      description="What is loaded, what is verified, and what is knowingly missing."
+      twin="/status.md">
+  <h1>Status and freshness</h1>
+  <p class="lede">
+    What is loaded, what has actually been checked, and what is knowingly missing.
+  </p>
+  <p>
+    An index that hides its staleness is worse than one that admits it, so the gaps below are
+    published in the same place as the numbers.
+  </p>
+
+  <h2>Resolver accuracy</h2>
+  <p>
+    The jurisdiction resolver is scored against {num(s.probes)} probe points taken from the
+    county's own zoning layers — the source that already carries the right answer.
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Confidence</th><th>Probes</th><th>Correct</th><th>Rate</th></tr></thead>
+      <tbody>
+        {Object.entries(r).map(([k, v]) => (
+          <tr>
+            <td>{k}</td><td>{num(v.probes)}</td><td>{num(v.correct)}</td>
+            <td>{v.probes ? `${((v.correct / v.probes) * 100).toFixed(2)}%` : '—'}</td>
+          </tr>
+        ))}
+        <tr>
+          <td><strong>overall</strong></td><td>{num(totalProbes)}</td><td>{num(totalCorrect)}</td>
+          <td>{totalProbes ? `${((totalCorrect / totalProbes) * 100).toFixed(2)}%` : '—'}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The first row is the one that matters: <strong>when the resolver reports high confidence it
+    has never been wrong</strong>. Every error falls inside the low-confidence band, and every
+    one of them was within 141 m of a jurisdiction line — annexation lag, since cities annex
+    continuously and Census boundaries update yearly. Near a city limit, no boundary source is
+    certain, and the resolver says so rather than guessing.
+  </p>
+
+  <h2>Coverage</h2>
+  <dl class="facts">
+    <dt>Jurisdictions</dt><dd>{num(js.length)} — all resolve; {withCases} have case records, {withCode} have code text</dd>
+    <dt>Land-use cases</dt><dd>{num(s.total_cases)} ({num(s.county_cases)} county, {num(s.duluth_cases)} Duluth)</dd>
+    <dt>Cases with a source link</dt><dd>{num(s.with_source_url)} of {num(s.total_cases)}</dd>
+    <dt>Cases with a parcel PIN</dt><dd>{num(s.with_pins)}</dd>
+    <dt>Code sections</dt><dd>{num(s.code_sections)}</dd>
+    <dt>Code tables</dt><dd>{num(s.code_tables)}, of which {num(s.code_tables_verified)} verified</dd>
+    <dt>Meeting documents</dt><dd>{num(s.meeting_docs)} ({num(s.meeting_pages)} pages)</dd>
+    <dt>Build data source</dt><dd>{usingFixtures ? 'site/fixtures (SAMPLE)' : (s.generated_from ?? 'snapshot')}</dd>
+    {s.generated_at && (<><dt>Snapshot taken</dt><dd>{s.generated_at.slice(0, 19).replace('T', ' ')} UTC</dd></>)}
+  </dl>
+
+  <h2>Known gaps</h2>
+  <ul>
+    <li>
+      <strong>{num(s.code_tables - s.code_tables_verified)} of {num(s.code_tables)} code tables are
+      unverified.</strong> Only Table 2-B has been checked against the rendered source page, and
+      even its merged PUD and CBD rows remain unreliable. Dimensional standards are the most
+      queried content in the corpus and the easiest to get silently wrong.
+    </li>
+    <li>
+      <strong>{num(s.merge_pending)} applicant name pairs await human review.</strong> They are
+      queued rather than merged, so developer case counts are lower bounds.
+    </li>
+    <li>
+      <strong>Duluth minutes are 57–69% scanned</strong> with no text layer. Where OCR is used the
+      text is stored separately and marked as a reconstruction — it is never presented as a
+      quotation of the record. The OCR pass has not been completed, so decisions and vote records
+      are under-captured.
+    </li>
+    <li>
+      <strong>Duluth case fields are agenda-mined, not database-sourced.</strong> The city runs no
+      case tracker, so these rows come out of agenda and minutes PDFs by pattern matching, and
+      the field-level quality is poor. Measured across all {num(dx?.cases)} of them:
+      <ul>
+        <li>{num(dx?.location_without_street_number)} have a “location” containing no street
+          number at all, {num(dx?.location_is_junk)} of which are plainly not addresses
+          (<code>as presented.</code>, <code>&#123;J&#125;</code>)</li>
+        <li>{num(dx?.request_is_boilerplate)} have a “request” that is just the word
+          <code>ORDINANCE</code></li>
+        <li>{num(dx?.applicant_overran)} have an applicant field that ran on into the applicant's
+          mailing address, and {num(dx?.applicant_missing)} have none</li>
+        <li>only {num(dx?.with_zoning)} carry a zoning district, and {num(dx?.with_outcome)} an outcome</li>
+      </ul>
+      Treat each of these as an <em>index entry pointing at a PDF</em>, not as a structured record.
+      The linked document is the authority; the extracted fields are a finding aid.
+    </li>
+    <li>
+      <strong>16 municipalities have boundaries but no corpus.</strong> They resolve correctly —
+      the resolver's job is complete for the whole county — but there is no code or case data
+      behind them yet.
+    </li>
+    <li>
+      <strong>Meeting body text is not published here</strong> (12.5 M characters). Only document
+      metadata is indexed.
+    </li>
+  </ul>
+
+  <h2>Legal posture</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Content</th><th>Posture</th><th>Basis</th></tr></thead>
+      <tbody>
+        <tr><td>Ordinance and plan text</td><td>Mirrored in full</td><td><em>Georgia v. Public.Resource.Org</em> (2020) — edicts of government</td></tr>
+        <tr><td>Case records</td><td>Mirrored in full</td><td>Facts; Georgia Open Records Act</td></tr>
+        <tr><td>County parcel and zoning geometry</td><td><strong>Never rehosted</strong></td><td>Gwinnett GIS licence forbids redistribution — queried live, linked out</td></tr>
+        <tr><td>Jurisdiction boundaries</td><td>Hosted</td><td>US Census TIGER — federal, public domain</td></tr>
+        <tr><td>IBC/IRC base text</td><td><strong>Never indexed</strong></td><td>ICC copyright; Georgia's amendment packets are indexed instead</td></tr>
+      </tbody>
+    </table>
+  </div>
+</Base>

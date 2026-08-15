@@ -1,0 +1,18 @@
+{
+  "name": "gwinnett-index-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "esbuild src/index.ts --bundle --format=esm --platform=neutral --outfile=dist-test/index.js --log-level=warning && node test/mcp.test.mjs",
+    "predeploy": "npm --prefix ../site run ci"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260813.1",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.123.0"
+  }
+}

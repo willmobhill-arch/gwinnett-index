@@ -1,0 +1,104 @@
+---
+import Base from '../layouts/Base.astro';
+import { jurisdictions, stats } from '../lib/source';
+import { num } from '../lib/format';
+import { TAGLINE, abs } from '../lib/site';
+
+const js = jurisdictions();
+const s = stats();
+const uninc = js.find((j) => j.kind === 'unincorporated')!;
+const cities = js.filter((j) => j.kind === 'municipality');
+const withData = js.filter((j) => j.cases > 0 || j.code_sections > 0);
+
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'DataCatalog',
+  name: 'Gwinnett Index',
+  description: TAGLINE,
+  url: abs('/'),
+  license: 'https://creativecommons.org/publicdomain/zero/1.0/',
+  isBasedOn: [
+    'https://gis3.gwinnettcounty.com/mapvis/rest/services/GISDataBrowser/GC_Planning/MapServer',
+    'https://www2.census.gov/geo/tiger/',
+    'https://www.duluthga.net/',
+  ],
+  spatialCoverage: { '@type': 'AdministrativeArea', name: 'Gwinnett County, Georgia' },
+};
+---
+<Base title="Which jurisdiction governs this address?" description={TAGLINE} twin="/index.md" jsonld={jsonld}>
+  <h1>Which jurisdiction actually governs this address?</h1>
+  <p class="lede">{TAGLINE}</p>
+
+  <form method="get" action="/resolve" style="margin:1.75rem 0">
+    <label for="q" style="display:block;font-size:.8rem;color:var(--ink-soft)">
+      Street address or parcel PIN in Gwinnett County
+    </label>
+    <input id="q" name="q" type="text" required
+           placeholder="3175 Peachtree Industrial Blvd, Duluth GA"
+           style="width:100%;max-width:34rem;padding:.6rem .7rem;font:inherit;font-size:1rem;
+                  border:1px solid var(--line);background:var(--bg);color:var(--ink);margin-top:.35rem" />
+    <button type="submit"
+            style="margin-top:.6rem;padding:.55rem 1.1rem;font:inherit;font-size:.9rem;
+                   border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer">
+      Resolve jurisdiction
+    </button>
+    <p class="sub" style="margin-top:.5rem">
+      Resolution runs against the API. Every answer states its confidence and its distance to
+      the nearest jurisdiction boundary — near a city limit, no boundary source is certain.
+    </p>
+  </form>
+
+  <h2>The trap this exists to close</h2>
+  <p>
+    A <strong>“Duluth, GA” mailing address is usually not in the City of Duluth.</strong>
+    It is in unincorporated Gwinnett — a different code, a different board, a different permit
+    portal. Unincorporated is <strong>{uninc.sq_mi} sq mi, 67.3% of the county's land area</strong>,
+    so getting this wrong is the default case rather than the edge case.
+  </p>
+  <p>
+    Nothing else on the internet resolves an address to its <em>governing</em> jurisdiction before
+    answering a zoning question. That resolution is what this index is for.
+  </p>
+
+  <h2>What is loaded</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Dataset</th><th>Records</th><th>Coverage</th></tr></thead>
+      <tbody>
+        <tr><td>Jurisdiction boundaries</td><td>{num(js.length)}</td><td>county + unincorporated + 17 cities</td></tr>
+        <tr><td>Land-use cases</td><td>{num(s.total_cases)}</td><td>{s.first_year}–{s.last_year}</td></tr>
+        <tr><td>Resolved applicants</td><td>{num(s.applicants)}</td><td>from {num(s.applicant_variants)} raw spellings</td></tr>
+        <tr><td>Duluth UDC sections</td><td>{num(s.code_sections)}</td><td>{num(s.code_tables)} tables, {num(s.code_tables_verified)} verified</td></tr>
+        <tr><td>Meeting documents</td><td>{num(s.meeting_docs)}</td><td>{num(s.meeting_pages)} pages</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Jurisdictions with records</h2>
+  <ul class="plain">
+    {withData.map((j) => (
+      <li>
+        <a href={`/j/${j.slug}`}>{j.name}</a>
+        <span class="sub">
+          {' — '}{j.cases > 0 ? `${num(j.cases)} cases` : 'no case records yet'}
+          {j.code_sections > 0 ? `, ${num(j.code_sections)} code sections` : ''}
+        </span>
+      </li>
+    ))}
+  </ul>
+  <p class="sub">
+    The other {cities.length - withData.filter((j) => j.kind === 'municipality').length} municipalities have
+    boundaries loaded and resolve correctly, but no case or code corpus yet.
+    <a href="/j">See all {js.length} →</a>
+  </p>
+
+  <h2>For agents</h2>
+  <ul class="plain">
+    <li><a href="/llms.txt">/llms.txt</a> <span class="sub">— orientation, and the jurisdiction rule</span></li>
+    <li><a href="/data.json">/data.json</a> <span class="sub">— Project Open Data 1.1 catalogue</span></li>
+    <li><a href="/catalog.jsonld">/catalog.jsonld</a> <span class="sub">— DCAT-US 3</span></li>
+    <li><a href="/sitemap.xml">/sitemap.xml</a> <span class="sub">— every route, with accurate lastmod</span></li>
+    <li><span class="sub">Every page has a <code>.md</code> twin at the same path — about 4× smaller than
+      the HTML, with the same facts and the same provenance.</span></li>
+  </ul>
+</Base>

@@ -1,0 +1,104 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Governing from '../../../components/Governing.astro';
+import { jurisdictions, casesFor, codeTables, bySlug } from '../../../lib/source';
+import { num, date, zone, rawCode, casePath, tableSlug } from '../../../lib/format';
+import { abs } from '../../../lib/site';
+
+export function getStaticPaths() {
+  return jurisdictions().map((j) => ({ params: { slug: j.slug } }));
+}
+
+const { slug } = Astro.params;
+const j = bySlug(slug!)!;
+const cs = casesFor(slug!);
+const recent = [...cs].sort((a, b) => (b.year ?? 0) - (a.year ?? 0)).slice(0, 25);
+const tables = codeTables().filter((t) => t.jurisdiction === j.slug);
+
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'Dataset',
+  name: `Land-use and zoning records — ${j.name}`,
+  description: `Zoning and land-use case records and code text for ${j.name}, Georgia.`,
+  url: abs(`/j/${j.slug}`),
+  license: 'https://creativecommons.org/publicdomain/zero/1.0/',
+  spatialCoverage: { '@type': 'AdministrativeArea', name: `${j.name}, Georgia` },
+  isBasedOn: j.code_url ?? undefined,
+  variableMeasured: ['case_number', 'case_type', 'decision', 'decision_date', 'acres', 'res_units'],
+};
+---
+<Base title={j.name} description={`Governing jurisdiction, code and land-use records for ${j.name}.`}
+      twin={`/j/${j.slug}.md`} jsonld={jsonld}>
+  <h1>{j.name}</h1>
+  <Governing j={j} />
+
+  <h2>Facts</h2>
+  <dl class="facts">
+    <dt>Kind</dt><dd>{j.kind}</dd>
+    <dt>Land area</dt><dd>{j.sq_mi ? `${j.sq_mi} sq mi` : '—'}</dd>
+    <dt>Code</dt>
+    <dd>{j.code_citation
+      ? (j.code_url ? <a href={j.code_url}>{j.code_citation}</a> : j.code_citation)
+      : <span class="sub">Not yet indexed. Boundaries resolve; the code corpus does not exist here yet.</span>}</dd>
+    <dt>Case records</dt><dd>{num(j.cases)}{j.first_year ? ` (${j.first_year}–${j.last_year})` : ''}</dd>
+    <dt>Code sections</dt><dd>{num(j.code_sections)}</dd>
+    <dt>Boundary source</dt><dd>{j.boundary_source ?? '—'}</dd>
+    <dt>FIPS place</dt><dd>{j.fips_place ?? '—'}</dd>
+  </dl>
+
+  {j.kind === 'unincorporated' && (
+    <div class="flag">
+      <p>
+        Every case below is a <strong>Board of Commissioners</strong> decision. Records whose
+        address reads “DULUTH HIGHWAY” or “OLD DULUTH ROAD” are street names in unincorporated
+        territory — they are not City of Duluth cases and must never be attributed to a
+        municipality.
+      </p>
+    </div>
+  )}
+
+  {cs.length > 0 && (
+    <>
+      <h2>Recent cases</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Case</th><th>Year</th><th>Applicant</th><th>Zone</th><th>Decision</th></tr></thead>
+          <tbody>
+            {recent.map((c) => (
+              <tr>
+                <td><a href={casePath(c)}>{c.case_number}</a></td>
+                <td>{c.year ?? '—'}</td>
+                <td>{c.applicant_raw ?? '—'}</td>
+                <td>{zone(c.existing_zone)}{c.proposed_zone && c.proposed_zone !== 'NA' ? ` → ${c.proposed_zone}` : ''}</td>
+                <td>{rawCode(c.decision)}{c.decision_date ? <span class="sub"> {date(c.decision_date)}</span> : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="sub">Showing {recent.length} of {num(cs.length)}.</p>
+    </>
+  )}
+
+  {tables.length > 0 && (
+    <>
+      <h2>Code tables</h2>
+      <ul class="plain">
+        {tables.map((t) => (
+          <li>
+            <a href={`/code/${j.slug}/${tableSlug(t)}`}>{t.citation}</a>
+            {' '}<span class="sub">{t.title}</span>
+            {t.quality === 'defective' && (
+              <span class="sub"> — header verified, cell values known wrong and withheld</span>
+            )}
+            {t.quality === 'unverified' && <span class="sub"> — unverified extraction</span>}
+          </li>
+        ))}
+      </ul>
+    </>
+  )}
+
+  {j.code_sections > 0 && (
+    <p style="margin-top:1.5rem"><a href={`/code/${j.slug}`}>Browse the {num(j.code_sections)} code sections →</a></p>
+  )}
+</Base>

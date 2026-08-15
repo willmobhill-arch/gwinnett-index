@@ -1,0 +1,73 @@
+name = "gwinnett-index"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# The whole site is deployed as Workers Static Assets, with the Worker attached
+# only to the API and MCP routes.
+#
+# This is the point, not an optimisation: per Cloudflare's docs, "if a requested
+# URL matches a file in the static assets directory, that file will be served -
+# without invoking Worker code." The corpus, the .md twins, llms.txt, the sitemaps
+# and the bulk export are therefore served by the platform. A bug in this Worker
+# cannot take the agent surface offline, which is the one thing this project
+# cannot afford: agents are the primary audience, not a secondary consumer of an
+# API.
+#
+# Not Pages: the Pages 100,000-file ceiling is tied to the ZONE plan (Pro, $20/mo
+# per domain), not to Workers Paid. Workers Static Assets gets the same ceiling
+# for $5/mo account-wide, in one deployment instead of Pages plus a separate
+# Worker.
+#
+# REQUIRES wrangler >= 4.34.0 (verified: developers.cloudflare.com 2025-09-02
+# changelog). Older versions silently enforce the 20,000-file free-tier cap, so a
+# stale wrangler fails a 30,000-file deploy with an error that looks like a plan
+# problem. Declaring it in package.json is not enough -- check the INSTALLED
+# version with `npx wrangler --version`, and note 4.x needs workers-types v5.
+#
+# `wrangler deploy` prints "Read 45735 files" for this build. That counts
+# directories too; the 30,496 files are what count against the 100,000 limit.
+[assets]
+directory = "../site/dist"
+binding = "ASSETS"
+not_found_handling = "404-page"
+
+# Astro emits /j/duluth/index.html, and Cloudflare's default html_handling
+# ("auto-trailing-slash") serves that at /j/duluth/ and 307s /j/duluth to it. But
+# the sitemap, every <link rel="canonical"> and every internal link use the
+# NO-SLASH form, so the default made all 15,232 HTML routes cost a redirect and
+# serve at a URL other than the one they declare canonical. For an index whose
+# value is being citable, that is the wrong place to be sloppy.
+#
+# drop-trailing-slash serves /j/duluth directly and redirects the slashed form to
+# it, which is what the build already claims everywhere.
+html_handling = "drop-trailing-slash"
+
+# Scoped deliberately. Everything NOT listed here is served straight from the
+# asset store and never reaches src/index.ts.
+#
+# FREE-TIER TRAP: on the free plan, run_worker_first requests that exceed limits
+# return 429 rather than falling back to asset serving. Do not evaluate this
+# configuration on free and draw conclusions about its behaviour under load.
+run_worker_first = ["/v1/*", "/mcp", "/openapi.json"]
+
+# SUPABASE_ANON_KEY is a secret: wrangler secret put SUPABASE_ANON_KEY
+# It is publishable and read-only (RLS is SELECT-only; the same key gets 401 on a
+# write), but keeping it in one place makes rotation a single operation.
+[vars]
+SUPABASE_URL = "https://losmnziukaqptxhqnhjh.supabase.co"
+
+# Custom domain. custom_domain = true makes wrangler create and manage the DNS
+# record itself, which is why the API token needs Zone:DNS:Edit and not just the
+# stock "Edit Cloudflare Workers" template. The zone (gwindex.net) must already be
+# active in the same Cloudflare account.
+#
+# Canonical host is www. Decide the apex separately: gwindex.net should REDIRECT to
+# www rather than serve the same corpus, or every page exists at two URLs and the
+# sitemap disagrees with half of them. A Cloudflare Redirect Rule on the zone does
+# it without touching this Worker.
+[[routes]]
+pattern = "www.gwindex.net"
+custom_domain = true
+
+[observability]
+enabled = true

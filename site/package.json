@@ -1,0 +1,19 @@
+{
+  "name": "gwinnett-index-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "verify": "node scripts/verify-build.mjs dist",
+    "ci": "astro build && node scripts/verify-build.mjs dist",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^5.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0"
+  }
+}

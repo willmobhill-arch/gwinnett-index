@@ -19,13 +19,14 @@ and anything still undated is flagged rather than guessed at.
 from __future__ import annotations
 
 import hashlib
+import collections
 import json
 import re
 import sys
 import time
 from datetime import date
 from pathlib import Path
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 
@@ -150,6 +151,11 @@ def fetch_all(client: httpx.Client, docs: list[dict]) -> list[dict]:
         if dest.exists() and dest.stat().st_size > 0:
             d["bytes"] = dest.stat().st_size
             d["fetch_status"] = "cached"
+            # Hash the cached copy too. Skipping this leaves rows with no content
+            # fingerprint at all, which breaks change detection AND any downstream
+            # step that keys on sha256 -- a re-run over a warm cache silently
+            # produces a corpus that a fresh run would not.
+            d["sha256"] = hashlib.sha256(dest.read_bytes()).hexdigest()
             continue
         try:
             r = client.get(d["url"], timeout=120, follow_redirects=True)
@@ -159,15 +165,37 @@ def fetch_all(client: httpx.Client, docs: list[dict]) -> list[dict]:
                 d["fetch_status"] = "ok"
                 d["sha256"] = hashlib.sha256(r.content).hexdigest()
             else:
-                d["fetch_status"] = f"http_{r.status_code}"
+                # Not a PDF. Usually an interstitial or an error page served with
+                # a 200, so record where we actually ENDED UP -- the requested URL
+                # is rarely where the bytes live.
+                d["fetch_status"] = f"http_{r.status_code}_{r.headers.get('content-type','?').split(';')[0]}"
+                d["fetch_host"] = urlparse(str(r.url)).netloc
                 d["bytes"] = 0
         except Exception as e:
             d["fetch_status"] = f"error:{type(e).__name__}"
             d["bytes"] = 0
+            # Duluth serves its PDFs off duluthga.net but 302s them to Revize's
+            # CDN (cms4files.revize.com). An egress allowlist naming only the
+            # site's own domain lets the redirect through and then blocks the
+            # file, so the host that actually failed is NOT the host we asked
+            # for. Chase the Location header to name it.
+            d["fetch_host"] = redirect_host(client, d["url"]) or urlparse(d["url"]).netloc
         if i % 25 == 0:
-            print(f"    fetched {i}/{len(docs)}")
+            ok = sum(1 for x in docs[:i] if x.get("fetch_status") in ("ok", "cached"))
+            print(f"    {i}/{len(docs)} attempted, {ok} downloaded")
         time.sleep(0.6)          # be a polite guest
     return docs
+
+
+def redirect_host(client: httpx.Client, url: str) -> str | None:
+    """Where does this URL actually point? One un-followed request, so a blocked
+    CDN can be named rather than inferred."""
+    try:
+        r = client.get(url, timeout=30, follow_redirects=False)
+        loc = r.headers.get("location")
+        return urlparse(loc).netloc if loc else None
+    except Exception:
+        return None
 
 
 def main() -> int:
@@ -186,7 +214,30 @@ def main() -> int:
             docs = fetch_all(client, docs)
             ok = sum(1 for d in docs if d["fetch_status"] in ("ok", "cached"))
             mb = sum(d.get("bytes", 0) for d in docs) / 1e6
-            print(f"  downloaded ok: {ok}/{len(docs)}  ({mb:.1f} MB)")
+            print(f"\n  downloaded ok: {ok}/{len(docs)}  ({mb:.1f} MB)")
+
+            # Report the failures. Writing a tidy JSONL of 356 records that point
+            # at files which were never downloaded, and exiting 0, is how the
+            # whole pipeline ends up looking finished while doing nothing.
+            bad = [d for d in docs if d["fetch_status"] not in ("ok", "cached")]
+            if bad:
+                reasons = collections.Counter(d["fetch_status"] for d in bad)
+                hosts = collections.Counter(d.get("fetch_host", "?") for d in bad)
+                print(f"  FAILED: {len(bad)}")
+                for reason, n in reasons.most_common(6):
+                    print(f"    {n:>4}  {reason}")
+                print("  hosts that actually failed:")
+                for host, n in hosts.most_common(6):
+                    print(f"    {n:>4}  {host}")
+            if ok == 0:
+                sys.exit(
+                    "\nNothing downloaded. The document index was read fine, so this is "
+                    "not a discovery problem.\nIf the failing host above is not the site's "
+                    "own domain, it is the CMS's file CDN and needs egress access too -- "
+                    "Duluth\nserves from duluthga.net but redirects every PDF to "
+                    "cms4files.revize.com.\nRefusing to write a document index for files "
+                    "that are not on disk."
+                )
 
     out = HERE / "duluth_meeting_docs.jsonl"
     with out.open("w", encoding="utf-8") as fh:

@@ -14,6 +14,10 @@ from pathlib import Path
 
 import pymupdf
 
+# A damaged font encoding makes pymupdf emit control characters that look like
+# nothing in a PDF reader and abort a Postgres load on the first U+0000.
+RE_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
 HERE = Path(__file__).parent
 IN = HERE / "duluth_meeting_docs.jsonl"
 OUT = HERE / "duluth_meeting_text.jsonl"
@@ -52,6 +56,7 @@ def main() -> int:
                     blank += 1
                 pages.append(t)
             text = "\n".join(pages)
+            text = RE_CONTROL.sub(" ", text)   # before whitespace collapsing
             text = re.sub(r"[ \t]+", " ", text)
             text = re.sub(r"\n{3,}", "\n\n", text).strip()
             npages = doc.page_count

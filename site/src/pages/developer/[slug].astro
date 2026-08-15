@@ -1,0 +1,34 @@
+---
+import Base from '../../layouts/Base.astro';
+import { developers, devSlug, bySlug } from '../../lib/source';
+import Governing from '../../components/Governing.astro';
+import { num } from '../../lib/format';
+
+export function getStaticPaths() {
+  return developers().map((d) => ({ params: { slug: devSlug(d.norm_name) }, props: { d } }));
+}
+const { d } = Astro.props;
+const j = bySlug('unincorporated-gwinnett')!;
+const rate = d.approved !== null && d.denied !== null && d.approved + d.denied > 0
+  ? Math.round((d.approved / (d.approved + d.denied)) * 100) : null;
+---
+<Base title={d.display_name} description={`${d.display_name}: ${d.total_cases} land-use cases in unincorporated Gwinnett County.`}
+      twin={`/developer/${devSlug(d.norm_name)}.md`}>
+  <h1>{d.display_name}</h1>
+  <p class="lede">{num(d.total_cases)} cases, {d.first_year}–{d.last_year}</p>
+  <Governing j={j} />
+  <dl class="facts">
+    <dt>Total cases</dt><dd>{num(d.total_cases)}</dd>
+    <dt>Since 2020</dt><dd>{num(d.cases_since_2020)}</dd>
+    <dt>Active span</dt><dd>{d.first_year}–{d.last_year} ({d.span_years} years)</dd>
+    <dt>Residential units proposed</dt><dd>{num(d.res_units)}</dd>
+    <dt>Acres</dt><dd>{num(d.acres)}</dd>
+    <dt>Non-residential sq ft</dt><dd>{num(d.nonres_sqft)}</dd>
+    <dt>Approved / denied</dt><dd>{num(d.approved)} / {num(d.denied)}{rate !== null ? ` (${rate}% approved)` : ''}</dd>
+    <dt>Name spellings merged</dt><dd>{num(d.name_variants)}</dd>
+  </dl>
+  <p class="sub">
+    Counts cover unincorporated Gwinnett only — the county's case layers contain no municipal
+    filings. Work this applicant did inside a city's limits is not represented here.
+  </p>
+</Base>
