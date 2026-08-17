@@ -34,7 +34,7 @@ Supabase project `losmnziukaqptxhqnhjh` (us-east-1). Loaded:
 | `land_use_case` | 11,848 — 11,739 county ArcGIS + 109 Duluth agenda-mined |
 | `applicant` | 7,369 resolved from 8,246 raw spellings |
 | `code_section` | 858 Duluth UDC sections |
-| `code_table` | 20 — 15 `verified`, 5 `unverified`, 0 `defective` |
+| `code_table` | 20 — all `verified`: every cell of all 997 rows read against a rendered page |
 | `meeting_document` | 353 |
 | `resolver_probe` | 1,915 scored test points — **the resolver's regression fixture** |
 
@@ -256,6 +256,16 @@ not by an error.
   via the package `__init__`, once as `__main__`, each with its own module-level
   state. A registry populated by one is empty in the other, and reports empty without
   erroring.
+- **A digit line above another bare value is a value, not a superscript marker.**
+  The fold that repairs `2\nSingle-Family Residential` also turned 4-B's stacked
+  parking ratios into single numbers — `20` over `18` stored as `1820` spaces per
+  1,000 sf, ten cells corrupted, every one plausible at a glance. Only fold a
+  leading digit line onto a line that contains letters.
+- **A library upgrade can print a banner on your data channel.** pymupdf 1.28
+  writes an advisory line to stdout ahead of the per-page JSON; the subprocess
+  parser swallowed the decode error and returned "no ruled table found" for every
+  page — a complete run, zero rows, exit 0. Tolerate crashes, never unparseable
+  output from a child that claims success.
 - **Check the "other"/unclassified bucket.** Nearly every silent bug above was
   found by looking at what failed to classify.
 - **A file size that doesn't add up is a bug signal.** 3.3 MB for 274 records of
@@ -325,30 +335,6 @@ part had a shape worth remembering:
 
 ## Known gaps
 
-- **5 of 20 UDC tables have unread cells** — 4-B (53 rows), 2-D ×2 (55 each) and
-  2-C ×2 (333 and 332). Those five are 828 of the corpus's 997 table rows, so most
-  of the *volume* is still unread even though most of the *tables* are done.
-  Fifteen tables have been read cell by cell against a rendered page. Every table's column count, header,
-  page range and row count now matches `tests/fixtures/duluth_udc_tables.json`, and
-  the cells come from the ruled grid rather than markdown. Nothing is `defective`
-  any more — that flag asserted the stored values were *known wrong*, which stopped
-  being true when they were re-extracted. What is outstanding is that **nobody has
-  read most of the cells against the rendered page**, so they stay `unverified` and
-  their values are withheld from snapshot, site and API alike.
-
-  The extractor is worth trusting more than the flag suggests: it reproduces
-  **492 of 493 cells** of the seven independently hand-transcribed tables, and the
-  one disagreement is its own (a stray `(` trailing 2-B's `---(9)`). But agreement on
-  seven tables is not evidence about the other eleven, and 2-C alone is 333 rows.
-  The worklist is simply:
-
-```sql
-SELECT citation, n_rows FROM code_table WHERE quality <> 'verified' ORDER BY n_rows;
-```
-
-  Verify against the rendered page, then add the table to `VERIFIED_AGAINST_RENDER`
-  in `ingest/pdf/publish_cells.py` — that dict is the only thing that promotes a
-  table, and adding a line to it is a claim that a person read the page.
 - **A correct extraction can still mislead, and the note is where that gets said.**
   Table 5-A's stacked cells pair from the bottom (six label lines against three
   values, so `40,000 sf` belongs to `RA-200 District`, not to `Minimum Lot Size:`).
@@ -356,8 +342,13 @@ SELECT citation, n_rows FROM code_table WHERE quality <> 'verified' ORDER BY n_r
   meaningless read alone. 7-C rows 2–4 are printed indented beneath a section band and
   the subordination is visual only, so the distances read as unqualified. Superscript
   footnote markers flatten to trailing digits everywhere, so `No minimum lot size3`
-  ends in a footnote number rather than a measurement. None of these are extraction
-  errors; all of them would mislead a reader who cannot see the page.
+  ends in a footnote number rather than a measurement. The 2-C/2-D use matrices
+  store their italic sub-group headings as ordinary rows with empty value cells, so
+  an all-blank row can be a heading rather than a use with no permissions; and 2-C
+  commercial row 312 folds two ruled rows whose merged "SEE ARTICLE 3, SECTION 342"
+  spans every district column into one row with the text in the CBD column only.
+  None of these are extraction errors; all of them would mislead a reader who
+  cannot see the page, which is why each lives in its table's `verification_note`.
 - **262 applicant merge candidates await human review** in
   `applicant_merge_candidate` (`decision='pending'`). Developer counts are lower
   bounds.
@@ -395,10 +386,7 @@ Deployment, the crawler check and the registry listing are all done. What remain
    older corpus with every page rendering perfectly.
 3. Minutes parser round two: ~36 of 110 Duluth cases still have no outcome, and the
    votes are in text that is now in the database.
-4. Read the 11 `unverified` tables' cells against their rendered pages, smallest
-   first (5-A is 5 rows, 6-E is 12, 2-C is 333). `ingest/pdf/extract_cells.py`
-   produced them and `publish_cells.py` promotes them; the render is the authority.
-5. Only then widen: Peachtree Corners and Norcross are mostly config.
+4. Only then widen: Peachtree Corners and Norcross are mostly config.
 
 ## Style
 

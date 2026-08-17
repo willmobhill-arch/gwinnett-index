@@ -84,6 +84,21 @@ def test_discovery_finds_exactly_the_tables_the_fixture_names(doc, truth):
     )
 
 
+def test_superscript_fold_leaves_stacked_values_alone():
+    """The marker fold must tell a footnote from a value stacked above another.
+
+    "2\\nSingle-Family Residential" is a superscript that reading order put first
+    (7-A). "3\\n5" is two parking ratios in one ruled cell (4-B row 16), and folding
+    them produced "53" -- ten cells corrupted this way before anyone read the page.
+    """
+    from ingest.pdf.extract_cells import fix_superscripts
+    assert fix_superscripts('2\nSingle-Family Residential') == 'Single-Family Residential2'
+    assert fix_superscripts('3\n5') == '3\n5'
+    assert fix_superscripts('20\n18') == '20\n18'
+    assert fix_superscripts('4\n3\n10') == '4\n3\n10'
+    assert fix_superscripts('1½\n1') == '1½\n1'
+
+
 @needs_pdf
 @pytest.mark.parametrize('label,page', [
     ('2-B', 52), ('2-C', 56), ('2-C', 70), ('2-D', 85), ('2-D', 89),

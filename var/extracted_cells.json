@@ -288,7 +288,7 @@
   "spanning_header": null,
   "n_cols": 12,
   "n_rows": 333,
-  "expected_rows": null,
+  "expected_rows": 333,
   "rows": [
    [
     "Agriculture, Forestry, and Fishing",
@@ -4980,7 +4980,7 @@
   "spanning_header": null,
   "n_cols": 14,
   "n_rows": 332,
-  "expected_rows": null,
+  "expected_rows": 332,
   "rows": [
    [
     "Agriculture, Forestry, and Fishing",
@@ -11043,7 +11043,7 @@
   "label": "2-D",
   "title": "Accessory and Temporary Uses Allowed by Zoning District: Central Business, Commercial, Office, and Industrial",
   "page_from": 89,
-  "page_to": 94,
+  "page_to": 93,
   "header": [
    "NAICS 2022",
    "USES",
@@ -11063,7 +11063,7 @@
   "spanning_header": null,
   "n_cols": 13,
   "n_rows": 55,
-  "expected_rows": null,
+  "expected_rows": 55,
   "rows": [
    [
     "ACCESSORY USES",
@@ -11891,9 +11891,7 @@
     "Sec. 350"
    ]
   ],
-  "notes": [
-   "p94: no ruled table found"
-  ]
+  "notes": []
  },
  {
   "label": "3-A",
@@ -12097,7 +12095,7 @@
   "spanning_header": null,
   "n_cols": 3,
   "n_rows": 53,
-  "expected_rows": null,
+  "expected_rows": 53,
   "rows": [
    [
     "a. RESIDENTIAL",
@@ -12181,17 +12179,17 @@
    ],
    [
     "7. Service Station, Gas Station, Auto Repair Shop, or\nGarage",
-    "53",
+    "3\n5",
     "Service bay, plus\n1,000 sf of retail space"
    ],
    [
     "8. Automobile, Truck, Recreation Vehicle,\nManufactured Home or Utility Structure Sales",
-    "12\n3",
+    "2\n1\n3",
     "1,000 sf of indoor sales area, plus\n2,500 sf of outdoor display, plus\nService bay"
    ],
    [
     "9. Custom Service Restaurant:\n(a) Quality restaurant\n(b) Family Restaurant",
-    "1820",
+    "20\n18",
     "1,000 sf of GFA\n1,000 sf of GFA"
    ],
    [
@@ -12221,17 +12219,17 @@
    ],
    [
     "(a) Less than 100,000 sf of GLA3",
-    "34\n10",
+    "4\n3\n10",
     "1,000 sf of total GLA, plus\n100 movie theater seats, plus\n1,000 sf of food service area"
    ],
    [
     "(b) 100,000-199,999 sf of GLA",
-    "34\n6",
+    "4\n3\n6",
     "1,000 sf of total GLA, plus\n100 theater seats over 450, plus\n1,000 sf of food service area"
    ],
    [
     "(c) 200,000-399,999 sf of GLA",
-    "34",
+    "4\n3",
     "1,000 sf of total GLA, plus\n100 theater seats over 750"
    ],
    [
@@ -12241,7 +12239,7 @@
    ],
    [
     "(e) 600,000 or more sf of GLA",
-    "35",
+    "5\n3",
     "1,000 sf of total GLA, plus\n100 theater seats over 750"
    ],
    [
@@ -12281,7 +12279,7 @@
    ],
    [
     "22. Building Supplies, Brick, or Lumber Yard",
-    "12",
+    "2\n1",
     "1,000 sf of indoor sales area, plus\n2,500 sf of outdoor display"
    ],
    [
@@ -12296,7 +12294,7 @@
    ],
    [
     "1. Wholesale, Office-Warehouse",
-    "11",
+    "1\n1",
     "200 sf of office space, plus\n1,000 sf of storage area"
    ],
    [
@@ -12311,7 +12309,7 @@
    ],
    [
     "4. Warehouse including commercial sales to the public",
-    "11",
+    "1\n1",
     "200 sf of sales or office, plus\n1,000 sf of storage area"
    ],
    [

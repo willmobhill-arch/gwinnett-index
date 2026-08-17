@@ -180,9 +180,16 @@ def fix_superscripts(cell: str) -> str:
     line first: Table 7-A's "Single-Family Residential2" arrives as "2\nSingle-Family
     Residential". Left alone the cell starts with a number, which in a table of
     setback distances reads as a measurement.
+
+    Only fold when the next line is TEXT. A digit line above another bare value is not
+    a marker, it is a stacked value: Table 4-B's parking column prints "3" over "5"
+    (service bay / retail) in one ruled cell, and folding turned it into "53" -- ten
+    cells corrupted this way, "20\n18" reading as 1820 spaces per 1,000 sf. Verified
+    against the rendered pages 140-141 on 2026-08-17.
     """
     lines = cell.split('\n')
-    if len(lines) >= 2 and re.fullmatch(r'\d{1,2}', lines[0].strip()):
+    if (len(lines) >= 2 and re.fullmatch(r'\d{1,2}', lines[0].strip())
+            and re.search(r'[A-Za-z]', lines[1])):
         return '\n'.join([lines[1].strip() + lines[0].strip()] + lines[2:]).strip()
     return cell
 
@@ -208,16 +215,20 @@ def merge_subdivided(rows: list[list[str]], starts: list[bool]) -> list[list[str
 
 
 def grids_on_page_isolated(page_no: int) -> list[dict]:
-    """Same, in a child process, so page 175 costs one page instead of the run."""
+    """Same, in a child process, so page 175 costs one page instead of the run.
+
+    A crash (page 175's segfault) is the only tolerated failure. Unparseable output
+    from a SUCCESSFUL child raises: pymupdf 1.28 started printing an advisory banner
+    on stdout ahead of the JSON, and swallowing the decode error here turned every
+    page into "no ruled table found" -- a full run that completed, reported zero rows
+    for 20 tables, and exited as if that were a result.
+    """
     r = subprocess.run([sys.executable, '-m', 'ingest.pdf.extract_cells',
                         '--page', str(page_no)],
                        capture_output=True, text=True, timeout=PAGE_TIMEOUT, cwd=_ROOT)
     if r.returncode != 0:
         return []
-    try:
-        return json.loads(r.stdout)
-    except json.JSONDecodeError:
-        return []
+    return json.loads(r.stdout)
 
 
 def drop_empty_columns(rows: list[list[str]]) -> list[list[str]]:
@@ -384,7 +395,14 @@ def extract_table(spec: dict) -> dict:
 
 def main() -> int:
     if '--page' in sys.argv:
-        print(json.dumps(grids_on_page(int(sys.argv[sys.argv.index('--page') + 1]))))
+        # pymupdf 1.28+ prints an advisory banner ("Consider using the pymupdf_layout
+        # package...") on STDOUT, which is this mode's data channel. Compute first
+        # with stdout diverted, then emit the JSON alone.
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            grids = grids_on_page(int(sys.argv[sys.argv.index('--page') + 1]))
+        print(json.dumps(grids))
         return 0
 
     fixture = json.load(open(FIXTURE))['tables']
