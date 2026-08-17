@@ -333,6 +333,34 @@ part had a shape worth remembering:
   run. Budget for the loop; economize by batching what goes through it, not by
   cutting it.
 
+The 2026-08-17 pass finished the remaining five tables (828 rows, ~10,000 cells) in
+one session by fanning the *reading* out to nine parallel agents while keeping
+promotion serial (full retrospective:
+`docs/plans/2026-08-17-session-log-udc-verification-fanout-retrospective.md`).
+What made the fan-out safe, and is worth repeating:
+
+- **Demand coverage as row-index ranges per page, and check they tile.** Three
+  agents split a 333-row table by page range and reported 0–122 / 123–250 /
+  251–332; a gap or overlap would have been visible arithmetic. "I read the
+  table" cannot be reconciled; "these indices, on these pages" can. Falsifiable
+  discrepancy claims (`row, col, page, stored, rendered`) are what let ten defect
+  reports be spot-checked in two page renders.
+- **In a fresh container, run the extraction suite before trusting a rerun.**
+  pymupdf 1.28 printed a banner on the subprocess's stdout and every page
+  silently became "no ruled table found" — a complete run, zero rows, exit 0.
+  The committed artifact was made under a different library version; the suite
+  failing 17/23 on a "healthy" setup was the only visible symptom. Library drift
+  between the container that produced a committed artifact and the one
+  re-verifying it is a real failure channel.
+- **Sanity-check the page-numbering convention on one render before briefing
+  anyone.** PDF page 139 prints "138 | Page"; confirming that once killed the
+  whole class of off-by-one reports across nine readers.
+- **Name the failure mode, not the method.** Told that letter-in-wrong-column
+  was the likely error, readers invented header-aligned crops on their own.
+  The clean tables still returned value: everything now in the
+  `verification_note`s came from asking every reader for "anything a reader who
+  cannot see the page would be misled by".
+
 ## Known gaps
 
 - **A correct extraction can still mislead, and the note is where that gets said.**
