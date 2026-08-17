@@ -1,6 +1,6 @@
 {
  "_about": "Hand-verified ground truth for Duluth UDC tables, read from rendered page images on 2026-08-14. This is the regression fixture: an extractor run must reproduce n_cols, header and n_rows exactly, or the build fails. Source: UDC_ADOPTED_9.8.2025_Amended_7-13-26.pdf, sha256 2311ae985c3f1e46cb84844fdb09bfe92b89917572e112c29b78cb9fe94a48c0, Last-Modified 2026-07-16.",
- "_method": "Each table was rendered at 200 dpi and transcribed by eye. Automated extraction was NOT trusted for any value here. ROW CONVENTION: n_rows counts RULED rows. A subdivision drawn inside a cell is not a row -- it stays in the cell, its parts separated by newlines. Table 9-A row 6 is one ruled row whose label cell reads \"Local Street / Non-residential / Non-residential Cul-de-sac\" against two value pairs; splitting it on lines would produce two rows with no values at all. Measured against the drawn rules: a real row boundary in these tables spans 0.75-1.00 of the table width, an in-cell division spans 0.11-0.34.",
+ "_method": "Each table was rendered at 200 dpi and transcribed by eye. Automated extraction was NOT trusted for any value here. ROW CONVENTION: n_rows counts RULED rows. A subdivision drawn inside a cell is not a row -- it stays in the cell, its parts separated by newlines. Table 9-A row 6 is one ruled row whose label cell reads \"Local Street / Non-residential / Non-residential Cul-de-sac\" against two value pairs; splitting it on lines would produce two rows with no values at all. Measured against the drawn rules: a real row boundary in these tables spans 0.75-1.00 of the table width, an in-cell division spans 0.11-0.34. The counts for 2-C (both), 2-D p89 and 4-B were null until 2026-08-17, when the cell-verification pass counted ruled rows per page against the renders and reconciled them with the stored indices; 2-D p89's page_to was corrected 94 -> 93 in the same pass (p94 carries no table -- Article Three begins there, verified on the render).",
  "tables": [
   {
    "label": "2-B",
@@ -52,7 +52,7 @@
    "page_from": 56,
    "page_to": 69,
    "n_cols": 12,
-   "n_rows": null,
+   "n_rows": 333,
    "spanning_header": null,
    "header": [
     "NAICS 2022",
@@ -76,7 +76,7 @@
    "page_from": 70,
    "page_to": 84,
    "n_cols": 14,
-   "n_rows": null,
+   "n_rows": 332,
    "spanning_header": null,
    "header": [
     "NAICS 2022",
@@ -122,9 +122,9 @@
    "label": "2-D",
    "title": "Accessory and Temporary Uses Allowed by Zoning District: Central Business, Commercial, Office, and Industrial",
    "page_from": 89,
-   "page_to": 94,
+   "page_to": 93,
    "n_cols": 13,
-   "n_rows": null,
+   "n_rows": 55,
    "spanning_header": null,
    "header": [
     "NAICS 2022",
@@ -264,7 +264,7 @@
    "page_from": 139,
    "page_to": 141,
    "n_cols": 3,
-   "n_rows": null,
+   "n_rows": 53,
    "spanning_header": null,
    "header": [
     "Use",
