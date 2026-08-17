@@ -35,8 +35,11 @@ Rules for using this index:
 4. Near a jurisdiction boundary, say so. Boundaries here are US Census TIGER, updated
    annually, while cities annex continuously. Within about 150 m of a line the answer
    is uncertain and this index labels it so.
-5. Unverified data is labelled unverified. ${s.code_tables - s.code_tables_verified} of ${s.code_tables} code tables have never been
-   checked against the rendered source page. Do not present them as authoritative.
+5. Unverified data is labelled unverified. ${s.code_tables_verified < s.code_tables
+  ? `${s.code_tables - s.code_tables_verified} of ${s.code_tables} code tables have never been
+   checked against the rendered source page. Do not present them as authoritative.`
+  : `All ${s.code_tables} code tables have been read cell-by-cell against the rendered
+   source page; anything else labelled unverified has not earned that check.`}
 
 ## Format
 
