@@ -69,12 +69,14 @@ const dx = s.duluth_extraction;
 
   <h2>Known gaps</h2>
   <ul>
-    <li>
-      <strong>{num(s.code_tables - s.code_tables_verified)} of {num(s.code_tables)} code tables are
-      unverified.</strong> Only Table 2-B has been checked against the rendered source page, and
-      even its merged PUD and CBD rows remain unreliable. Dimensional standards are the most
-      queried content in the corpus and the easiest to get silently wrong.
-    </li>
+    {s.code_tables_verified < s.code_tables && (
+      <li>
+        <strong>{num(s.code_tables - s.code_tables_verified)} of {num(s.code_tables)} code tables are
+        unverified.</strong> Their cell values are withheld until every cell has been read against
+        the rendered source page. Dimensional standards are the most queried content in the corpus
+        and the easiest to get silently wrong.
+      </li>
+    )}
     <li>
       <strong>{num(s.merge_pending)} applicant name pairs await human review.</strong> They are
       queued rather than merged, so developer case counts are lower bounds.

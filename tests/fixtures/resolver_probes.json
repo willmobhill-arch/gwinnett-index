@@ -1,0 +1,26 @@
+{
+ "_about": "Frozen regression probes for resolve_jurisdiction — the Phase 1 exit criterion from docs/plans/2026-08-12-gwinnett-index-build-plan.md, in point form. 10 points inside Duluth city limits, 10 in unincorporated Gwinnett within 3 km of the Duluth boundary: the belt where a 'Duluth, GA' mailing address is NOT the City of Duluth, which is the product's core claim.",
+ "_method": "Sampled 2026-08-17 from resolver_probe (the 1,915-point scored fixture taken from the county's own zoning layers), keeping only points the resolver answered correctly at HIGH confidence on that date — this file pins that behavior, it does not measure accuracy. The unincorporated ten were additionally required to lie within 3,000 m of the Duluth city boundary (ST_DWithin on geography) and outside it (NOT ST_Within). Points are probes by design, not addresses: the public /v1/resolve geocodes first, and a geocoder's drift is not the resolver's regression. expected_citation pins the jurisdiction row's code_citation as returned BY the function, because /j/duluth rendering 'Code: not indexed here' over an 858-section corpus was a live wrong answer found 2026-08-17 — a null citation for an indexed jurisdiction must fail this test, not ship.",
+ "probes": [
+  {"id": 1,   "lng": -84.1754294048419, "lat": 34.0023619020024, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 6,   "lng": -84.1312414600428, "lat": 34.0114020059503, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 7,   "lng": -84.1616477171379, "lat": 33.9862578987947, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 8,   "lng": -84.1571729340846, "lat": 33.9866193742081, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 10,  "lng": -84.1770016304955, "lat": 34.0022678239094, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 14,  "lng": -84.1584840660586, "lat": 34.0260825483491, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 18,  "lng": -84.1360824199766, "lat": 34.0004382186039, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 19,  "lng": -84.1358714660909, "lat": 34.0016424478379, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 20,  "lng": -84.1369710628162, "lat": 34.0013195492604, "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 21,  "lng": -84.1357953201246, "lat": 34.00263406138,   "expected_slug": "duluth", "expected_citation": "Duluth Unified Development Code"},
+  {"id": 510, "lng": -84.1678329782601, "lat": 33.9671404973158, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 511, "lng": -84.1675641613098, "lat": 33.9706270958914, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 518, "lng": -84.1217642508191, "lat": 33.9510154400323, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 621, "lng": -84.1551941747358, "lat": 34.028347589551,  "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 643, "lng": -84.1065082683645, "lat": 34.0362855318587, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 651, "lng": -84.110945014996,  "lat": 34.0362790261995, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 652, "lng": -84.1073925565434, "lat": 34.0373668337615, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 657, "lng": -84.133664435818,  "lat": 33.9775062789744, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 658, "lng": -84.1384958478482, "lat": 33.9796089910676, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"},
+  {"id": 700, "lng": -84.1217422194925, "lat": 33.9587616328096, "expected_slug": "unincorporated-gwinnett", "expected_citation": "Gwinnett County Unified Development Ordinance"}
+ ]
+}

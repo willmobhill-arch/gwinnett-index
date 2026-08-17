@@ -373,6 +373,52 @@ if (!fs.existsSync(truthPath)) {
   }
 }
 
+// ----------------------------------------------- prose that quotes a number
+// The status page carried "20 of 20 verified" in its table and "only Table 2-B has
+// been checked" in the sentence below it, on the one page whose job is honesty about
+// staleness. The count was templated; the prose beside it was hardcoded from when it
+// was true. Numbers derived from the snapshot must not share a page with claims that
+// contradict them.
+{
+  const tables = JSON.parse(fs.readFileSync(tablesPath, 'utf8'));
+  const nVerified = tables.filter((t) => t.quality === 'verified').length;
+  const surfaces = ['status.md', 'llms.txt'].filter((p) => exists(p));
+  const staleClaim = /\d+ of \d+ code tables (are unverified|have never been)/;
+  const bad = [];
+  for (const p of surfaces) {
+    const text = read(p);
+    if (/Only Table 2-B/.test(text)) bad.push(`${p}: hardcoded "Only Table 2-B" survives`);
+    if (nVerified === tables.length && staleClaim.test(text))
+      bad.push(`${p}: claims unverified tables while the snapshot says ${nVerified}/${tables.length} verified`);
+    if (nVerified < tables.length && p === 'status.md' && !staleClaim.test(text))
+      bad.push(`${p}: ${tables.length - nVerified} tables are unverified and the page does not say so`);
+  }
+  if (bad.length) fail.push(`status prose contradicts the snapshot: ${bad.join(' | ')}`);
+  else ok.push(`status prose agrees with the snapshot (${nVerified}/${tables.length} tables verified)`);
+}
+
+// ------------------------------------- an indexed jurisdiction names its code
+// /j/duluth rendered "Code: not indexed here" over an 858-section corpus: the
+// jurisdiction row's code_citation was null in production while the site fixture had
+// the right value, so a fixture-backed build looked correct and only production was
+// wrong. Null and "not indexed here" must never render for a jurisdiction the corpus
+// itself says is indexed.
+{
+  const js = JSON.parse(fs.readFileSync(
+    path.join(usingFixtures ? path.resolve('fixtures') : SNAP, 'jurisdictions.json'), 'utf8'));
+  const indexed = js.filter((j) => (j.code_sections ?? 0) > 0 || (j.code_tables ?? 0) > 0);
+  const bad = [];
+  for (const j of indexed) {
+    const p = `j/${j.slug}.md`;
+    if (!exists(p)) continue;                      // route coverage is gated above
+    const twin = read(p);
+    if (/not indexed here/.test(twin)) bad.push(`/j/${j.slug} says "not indexed here" over ${j.code_sections} sections`);
+    else if (j.code_citation && !twin.includes(j.code_citation)) bad.push(`/j/${j.slug} never names "${j.code_citation}"`);
+  }
+  if (bad.length) fail.push(`indexed jurisdiction(s) deny their own corpus: ${bad.join(' | ')}`);
+  else ok.push(`${indexed.length} indexed jurisdiction(s) name their code citation`);
+}
+
 // ------------------------------------------------------------------ report
 for (const o of ok) console.log(`  ok    ${o}`);
 for (const w of warn) console.log(`  warn  ${w}`);

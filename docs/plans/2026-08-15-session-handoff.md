@@ -4,7 +4,7 @@ Supersedes `docs/plans/2026-08-14-session-handoff.md`.
 
 Repo: **`willmobhill-arch/gwinnett-index`** · Supabase `losmnziukaqptxhqnhjh`
 Site: https://www.gwindex.net · MCP: `net.gwindex/gwinnett-index`
-Branch: `claude/buildout-process-continuation-tfh56r` · PR #1 (draft)
+Branch: `claude/buildout-process-continuation-tfh56r` · PR #1 (merged 2026-08-15; line kept for the record, this handoff is itself superseded)
 
 ---
 

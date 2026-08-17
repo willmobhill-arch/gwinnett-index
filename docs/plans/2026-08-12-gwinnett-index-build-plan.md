@@ -115,10 +115,16 @@ $$ LANGUAGE sql STABLE;
 
 ### 1.3 Prove it
 
-- [ ] Build a test set of **20 known addresses**: 10 inside Duluth city limits, 10 with
+- [x] Build a test set of **20 known addresses**: 10 inside Duluth city limits, 10 with
       a Duluth mailing address but in unincorporated county. Source them from the
       county's own zoning layers, which already carry the correct answer.
-- [ ] Assert 20/20 correct. Commit as `tests/test_resolver.py`.
+      *(Done 2026-08-17 as frozen points rather than addresses —
+      `tests/fixtures/resolver_probes.json`, sampled from `resolver_probe`, which is
+      itself sourced from the county's zoning layers. Points on purpose: the geocoder's
+      drift is not the resolver's regression.)*
+- [x] Assert 20/20 correct. Commit as `tests/test_resolver.py`. *(Done 2026-08-17;
+      also pins `code_citation` per jurisdiction, so an indexed jurisdiction answering
+      without its citation fails the suite.)*
 
 **Exit criteria:** given any Gwinnett address, you return the correct governing
 jurisdiction with a citation to the boundary source. 20/20 on the test set.

@@ -59,9 +59,11 @@ ${table(['Metric', 'Value'], [
 
 ## Known gaps
 
-- **${s.code_tables - s.code_tables_verified} of ${s.code_tables} code tables are unverified.** Only Table 2-B has been checked
-  against the rendered source page, and even its merged PUD and CBD rows remain unreliable.
-- **${s.merge_pending} applicant name pairs await human review**, so developer case counts are lower bounds.
+${s.code_tables_verified < s.code_tables
+  ? `- **${s.code_tables - s.code_tables_verified} of ${s.code_tables} code tables are unverified.** Their cell values are withheld
+  until every cell has been read against the rendered source page.
+`
+  : ''}- **${s.merge_pending} applicant name pairs await human review**, so developer case counts are lower bounds.
 - **Duluth minutes are 57–69% scanned** with no text layer. OCR text is stored separately and
   marked as a reconstruction, never as a quotation of the record. The OCR pass is incomplete.
 - **Duluth case fields are agenda-mined, not database-sourced.** The city runs no case tracker,
