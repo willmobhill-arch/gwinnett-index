@@ -148,6 +148,58 @@ def adaptive(zone: str, token: str, dim: str, limit: int, extra: str = "") -> li
     return d["viewer"]["zones"][0]["g"]
 
 
+def probe_data_path() -> dict:
+    """Ask the live API a real question, because no metric here can.
+
+    THIS IS NOT OPTIONAL COLOUR. Subrequests count fetch ATTEMPTS, not answers,
+    and nothing on the Cloudflare side distinguishes a tool call that returned
+    data from one that returned an error:
+
+      * MCP transports failures in the JSON-RPC body, so a failed tools/call is
+        HTTP 200 with isError:true. edgeResponseStatus cannot see it.
+      * originResponseStatus is 0 for every /mcp request, because the Worker IS
+        the origin -- there is no upstream status to read.
+      * The Worker catches the upstream failure and returns a JSON error, so
+        workersInvocationsAdaptive reports errors=0 while 100% of data requests
+        fail. "Zero errors" is true and means nothing.
+
+    Measured 2026-10-05: the Supabase project had been paused since early
+    September, every data request had been answering "upstream 530: error code
+    1016" for a month, and all three metrics above looked healthy -- 42,472
+    invocations, 0 errors, a rising subrequest count that read as growing demand.
+    One GET would have caught it on day one. So the report leads with the probe,
+    and the subrequest count is labelled attempts.
+    """
+    url = os.environ.get("GWINDEX_SITE", "https://www.gwindex.net") + "/v1/jurisdictions"
+    # Identify the probe. urllib's default "Python-urllib/3.x" is signature-banned
+    # by this zone -- it comes back 403 error_1010 browser_signature_banned, which
+    # a naive probe would report as the data path being down. A probe that cannot
+    # tell "blocked" from "broken" is worse than no probe, so: send a real UA, and
+    # classify 1010/1020 separately below.
+    try:
+        req = urllib.request.Request(url, headers={
+            "accept": "application/json",
+            "user-agent": "gwindex-analytics/1.0 (+https://www.gwindex.net; internal health probe)",
+        })
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = r.read(2000).decode("utf-8", "replace")
+            payload = json.loads(body)
+            # A 200 carrying an error object still means the data path is down.
+            if isinstance(payload, dict) and payload.get("error"):
+                return {"ok": False, "status": r.status, "detail": payload["error"]}
+            n = len(payload) if isinstance(payload, list) else None
+            return {"ok": True, "status": r.status, "rows": n}
+    except urllib.error.HTTPError as e:
+        detail = e.read(500).decode("utf-8", "replace").strip()
+        if '"error_code":101' in detail or '"error_code":102' in detail:
+            # Cloudflare blocked the probe itself (bot signature, firewall rule).
+            # Says nothing about whether the data path works.
+            return {"ok": None, "status": e.code, "detail": "probe blocked by Cloudflare: " + detail[:200]}
+        return {"ok": False, "status": e.code, "detail": detail}
+    except Exception as e:  # DNS, TLS, timeout -- all mean "cannot answer"
+        return {"ok": False, "status": None, "detail": f"{type(e).__name__}: {e}"}
+
+
 def collect(token: str, days: int = 30) -> dict:
     zone, account = zone_and_account(token)
     zrows = daily_zone(zone, token, days)
@@ -176,6 +228,7 @@ def collect(token: str, days: int = 30) -> dict:
 
     return {
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "data_path": probe_data_path(),
         "window_days": days,
         "zone": {
             "requests": sum(r["sum"]["requests"] for r in zrows),
@@ -190,9 +243,10 @@ def collect(token: str, days: int = 30) -> dict:
         "worker": {
             "requests": sum(r["sum"]["requests"] for r in wrows),
             "errors": sum(r["sum"]["errors"] for r in wrows),
-            # The headline. See the module docstring: this is real tool calls.
-            "subrequests": sum(r["sum"]["subrequests"] for r in wrows),
-            "subrequests_daily": [
+            # ATTEMPTS, not answers -- see probe_data_path(). A subrequest is a
+            # fetch that happened, whether Supabase answered it or not.
+            "subrequest_attempts": sum(r["sum"]["subrequests"] for r in wrows),
+            "subrequest_attempts_daily": [
                 {"date": r["dimensions"]["date"], "n": r["sum"]["subrequests"]}
                 for r in wrows if r["sum"]["subrequests"]
             ],
@@ -220,15 +274,24 @@ def collect(token: str, days: int = 30) -> dict:
 
 
 def render(d: dict) -> None:
-    z, w, h = d["zone"], d["worker"], d["last_24h"]
+    z, w, h, p = d["zone"], d["worker"], d["last_24h"], d["data_path"]
     print(f"Gwinnett Index — {d['generated']}  ({d['window_days']}d window)\n")
+    if p["ok"] is None:
+        print(f"  DATA PATH   UNKNOWN — probe was blocked, not answered: {p['detail'][:120]}")
+        print("              Health is unverified. Fix the probe before trusting anything below.\n")
+    elif p["ok"]:
+        print(f"  DATA PATH   ok — /v1/jurisdictions returned {p['rows']} rows\n")
+    else:
+        print(f"  DATA PATH   *** DOWN *** /v1/jurisdictions -> {p['status']}: {p['detail']}")
+        print("              Every tool call below is failing. Counts are attempts,")
+        print("              not answers, and 'errors 0' does not contradict this.\n")
     print(f"  corpus      {z['requests']:>9,} requests   {z['page_views']:>9,} pageviews"
           f"   {z['bytes']/1e9:.2f} GB   {z['cache_hit_pct']}% cached")
     print(f"  worker      {w['requests']:>9,} invocations  {w['errors']} errors")
-    print(f"  TOOL CALLS  {w['subrequests']:>9,} subrequests  "
-          f"({len(w['subrequests_daily'])} of {d['window_days']} days non-zero)")
-    if w["subrequests_daily"]:
-        tail = w["subrequests_daily"][-7:]
+    print(f"  TOOL CALLS  {w['subrequest_attempts']:>9,} attempts     "
+          f"({len(w['subrequest_attempts_daily'])} of {d['window_days']} days non-zero)")
+    if w["subrequest_attempts_daily"]:
+        tail = w["subrequest_attempts_daily"][-7:]
         print("              last 7 active days: " + "  ".join(f"{r['date'][5:]}={r['n']}" for r in tail))
 
     print(f"\n  last 24h ({h['requests_sampled']:,} requests)")
