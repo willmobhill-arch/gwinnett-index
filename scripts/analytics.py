@@ -258,6 +258,16 @@ def collect(token: str, days: int = 30) -> dict:
             "errors": sum(r["sum"]["errors"] for r in wrows),
             # ATTEMPTS, not answers -- see probe_data_path(). A subrequest is a
             # fetch that happened, whether Supabase answered it or not.
+            #
+            # AND IT COUNTS OUR OWN PROBES. probe_data_path() below hits
+            # /v1/jurisdictions, which costs a Supabase subrequest, so every run
+            # of this script adds 1; the daily keepalive's live-site check adds
+            # another. Measured 2026-10-05: the day's count went 20 -> 38 across
+            # an hour of development runs. The probes cannot be subtracted here,
+            # because identifying them needs the userAgent dimension, which is
+            # capped at a 1-day window while this series is 30-day -- so the
+            # render states the contamination instead of pretending to net it
+            # out. Treat small daily numbers as an upper bound on real demand.
             "subrequest_attempts": sum(r["sum"]["subrequests"] for r in wrows),
             "subrequest_attempts_daily": [
                 {"date": r["dimensions"]["date"], "n": r["sum"]["subrequests"]}
@@ -303,6 +313,8 @@ def render(d: dict) -> None:
     print(f"  worker      {w['requests']:>9,} invocations  {w['errors']} errors")
     print(f"  TOOL CALLS  {w['subrequest_attempts']:>9,} attempts     "
           f"({len(w['subrequest_attempts_daily'])} of {d['window_days']} days non-zero)")
+    print("              includes this script's own probe (1/run) and the keepalive's"
+          " (1/run)\n              — an upper bound on real demand, not a count of it")
     if w["subrequest_attempts_daily"]:
         tail = w["subrequest_attempts_daily"][-7:]
         print("              last 7 active days: " + "  ".join(f"{r['date'][5:]}={r['n']}" for r in tail))
