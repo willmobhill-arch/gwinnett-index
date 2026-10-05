@@ -182,13 +182,26 @@ def probe_data_path() -> dict:
             "user-agent": "gwindex-analytics/1.0 (+https://www.gwindex.net; internal health probe)",
         })
         with urllib.request.urlopen(req, timeout=30) as r:
-            body = r.read(2000).decode("utf-8", "replace")
+            # Read the WHOLE body. The first version of this capped the read at
+            # 2000 bytes and then json.loads()'d it, so a perfectly healthy
+            # 19-jurisdiction response truncated mid-string and the probe
+            # reported DOWN -- a silent cap turning a success into a failure, in
+            # the one function whose job is to not do that. Cap generously
+            # instead, and treat hitting the cap as UNKNOWN rather than DOWN.
+            body = r.read(1_000_000).decode("utf-8", "replace")
+            if len(body) >= 1_000_000:
+                return {"ok": None, "status": r.status,
+                        "detail": "response exceeded 1 MB; probe cannot parse it"}
             payload = json.loads(body)
             # A 200 carrying an error object still means the data path is down.
             if isinstance(payload, dict) and payload.get("error"):
                 return {"ok": False, "status": r.status, "detail": payload["error"]}
-            n = len(payload) if isinstance(payload, list) else None
-            return {"ok": True, "status": r.status, "rows": n}
+            # /v1/jurisdictions answers with an object, not a bare array.
+            rows = payload if isinstance(payload, list) else (payload or {}).get("jurisdictions") or []
+            if not rows:
+                return {"ok": False, "status": r.status,
+                        "detail": f"200 but no jurisdictions: {body[:200]}"}
+            return {"ok": True, "status": r.status, "rows": len(rows)}
     except urllib.error.HTTPError as e:
         detail = e.read(500).decode("utf-8", "replace").strip()
         if '"error_code":101' in detail or '"error_code":102' in detail:

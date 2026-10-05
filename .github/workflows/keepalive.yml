@@ -1,0 +1,37 @@
+name: keepalive
+
+# Keeps the Supabase free-plan project from pausing, and fails loudly the moment
+# the data path stops answering. The reasoning, and the month-long outage that
+# prompted it, are documented in scripts/keepalive.py.
+#
+# TRAP: GitHub disables scheduled workflows after 60 days with no repository
+# activity. If this repo goes quiet the cron stops, nothing announces it, and
+# the project pauses roughly a week later -- the same outage arriving silently
+# by a different route. Any push re-enables it; a calendar reminder is the only
+# real guard, because the thing that would have warned you is the thing that
+# died.
+
+on:
+  schedule:
+    # Daily. Deliberately not site.yml's '17 6 * * 1' slot, and not :00, so this
+    # does not queue behind the top-of-hour rush. UTC, like every GitHub cron.
+    - cron: '41 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    # `vars.X || secrets.X` on the non-secret names: Variables and Secrets are
+    # separate stores, and reading the wrong one yields an empty string rather
+    # than an error. That has already cost this repo a red build.
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SITE_URL: ${{ vars.SITE_URL || secrets.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Stdlib only, so there is nothing to install.
+      - run: python3 scripts/keepalive.py
