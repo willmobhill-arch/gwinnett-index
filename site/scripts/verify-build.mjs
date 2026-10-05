@@ -94,7 +94,19 @@ for (const a of ['GPTBot', 'ClaudeBot', 'OAI-SearchBot', 'Claude-SearchBot', 'Pe
 }
 if (!/Content-Signal:.*ai-input=yes/.test(robots)) fail.push('robots.txt lacks an affirmative Content-Signal');
 if (!robots.includes('Sitemap:')) fail.push('robots.txt does not declare the sitemap');
-if (!fail.some((f) => f.includes('robots.txt'))) ok.push('robots.txt names every target crawler and declares the sitemap');
+for (const a of ['SemrushBot', 'MJ12bot', 'DotBot']) {
+  if (!new RegExp(`User-agent: ${a}\\nDisallow: /`).test(robots)) fail.push(`robots.txt does not disallow ${a}`);
+}
+// The expensive direction. An AI target crawler landing in a Disallow block
+// would cut off the exact audience this index is built for, and every page
+// would still render perfectly while it happened -- the same shape as Bot Fight
+// Mode 403ing them. Assert the deny list never grows into the allow list.
+for (const a of ['GPTBot', 'ClaudeBot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot',
+                 'Perplexity-User', 'Google-Extended', 'Googlebot', 'Bingbot', 'CCBot',
+                 'Applebot', 'meta-externalagent', 'ChatGPT-User', 'Claude-User']) {
+  if (new RegExp(`User-agent: ${a}\\nDisallow`).test(robots)) fail.push(`robots.txt DISALLOWS ${a} -- that is the audience, not a crawler to block`);
+}
+if (!fail.some((f) => f.includes('robots.txt'))) ok.push('robots.txt names every target crawler, disallows the SEO-only ones, and declares the sitemap');
 
 // -------------------------------------------------------------- llms.txt
 const llms = read('llms.txt');
