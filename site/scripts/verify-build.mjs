@@ -108,6 +108,26 @@ for (const a of ['GPTBot', 'ClaudeBot', 'OAI-SearchBot', 'Claude-SearchBot', 'Pe
 }
 if (!fail.some((f) => f.includes('robots.txt'))) ok.push('robots.txt names every target crawler, disallows the SEO-only ones, and declares the sitemap');
 
+// ------------------------------------------------------------- indexnow
+// IndexNow authenticates by fetching https://<host>/<key>.txt and checking the
+// body equals the key. If that file is missing from dist/ the endpoint returns
+// 403 forever and the submissions silently stop working, while every page still
+// renders perfectly -- so assert the file shipped, and that its contents still
+// match its name. scripts/indexnow.py derives the key FROM this file, so a
+// mismatch here is the only way the two can disagree.
+{
+  const keys = fs.readdirSync(DIST)
+    .filter((f) => /^[A-Za-z0-9-]{8,128}\.txt$/.test(f))
+    .filter((f) => read(f).trim() === f.replace(/\.txt$/, ''));
+  if (keys.length === 0) {
+    fail.push('no IndexNow key file in dist/ (a <key>.txt whose body is <key>) — submissions would 403');
+  } else if (keys.length > 1) {
+    fail.push(`${keys.length} IndexNow key files in dist/ — exactly one, or the script picks arbitrarily: ${keys.join(', ')}`);
+  } else {
+    ok.push(`IndexNow key file published (${keys[0]}) and its body matches its name`);
+  }
+}
+
 // -------------------------------------------------------------- llms.txt
 const llms = read('llms.txt');
 if (!/not in the City of Duluth/i.test(llms)) fail.push('llms.txt does not state the jurisdiction trap');

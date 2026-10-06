@@ -79,9 +79,22 @@ const jsonld = {
     {withData.map((j) => (
       <li>
         <a href={`/j/${j.slug}`}>{j.name}</a>
+        {/* The code link below is the point. /code/<slug> sat three hops from here
+            (/ -> /j/duluth -> /code/duluth -> section) and Search Console reported a
+            deep section as "URL is unknown to Google" -- never discovered, not
+            crawled and declined. Measured 2026-10-06: Googlebot reaches depth 1 at
+            ~9 requests/day, so linking the hub here puts it at depth 1 and its 858
+            sections at depth 2. It does not create crawl budget; it moves those
+            pages from unknown to discoverable, which is the state the error named.
+
+            The conditional is kept ADJACENT to the cases expression, with no newline
+            between them: JSX renders a newline between sibling expressions as a
+            space, which is why the live site reads "109 cases , 858 code sections".
+            This comment lives out here for the same reason. */}
         <span class="sub">
-          {' — '}{j.cases > 0 ? `${num(j.cases)} cases` : 'no case records yet'}
-          {j.code_sections > 0 ? `, ${num(j.code_sections)} code sections` : ''}
+          {' — '}{j.cases > 0 ? `${num(j.cases)} cases` : 'no case records yet'}{j.code_sections > 0 && (
+            <>{', '}<a href={`/code/${j.slug}`}>{num(j.code_sections)} code sections</a></>
+          )}
         </span>
       </li>
     ))}

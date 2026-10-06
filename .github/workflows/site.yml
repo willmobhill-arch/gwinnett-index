@@ -325,6 +325,22 @@ jobs:
 
           exit $fail
 
+      # Runs last, and only after the step above has confirmed the live site is
+      # the build we just uploaded. That ordering is load-bearing: IndexNow
+      # validates by fetching https://<host>/<key>.txt, so submitting before the
+      # new build is live checks the key against the PREVIOUS deploy and can 403.
+      #
+      # Google is not an IndexNow participant. This notifies Bing and Yandex
+      # only, which is still the engine worth notifying -- measured 2026-10-06,
+      # bingbot made 167 requests to Googlebot's 9.
+      #
+      # A failure here means the notification did not happen, NOT that the deploy
+      # broke: the artifact is already live and verified. It still fails the job,
+      # because a notifier that fails quietly is exactly the shape of bug this
+      # repo keeps finding.
+      - name: Notify IndexNow of changed URLs
+        run: python3 scripts/indexnow.py --since "$(date -u +%F)"
+
   agent-access:
     # The check everyone forgets. Cloudflare Bot Fight Mode silently 403s AI
     # crawlers regardless of robots.txt, and every page still looks perfect in a
