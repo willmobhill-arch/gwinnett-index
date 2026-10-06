@@ -325,19 +325,30 @@ jobs:
 
           exit $fail
 
-      # Runs last, and only after the step above has confirmed the live site is
-      # the build we just uploaded. That ordering is load-bearing: IndexNow
-      # validates by fetching https://<host>/<key>.txt, so submitting before the
-      # new build is live checks the key against the PREVIOUS deploy and can 403.
+
+  indexnow:
+    # Its own job, deliberately, and NOT a step in deploy. The first real run of
+    # this failed with IndexNow's 403, which marked the whole deploy job failed --
+    # while the deploy had in fact succeeded and the site was live and verified.
+    # A notification failure that reads as "the deploy broke" is a false signal,
+    # and false signals are exactly why five consecutive weeks of red scheduled
+    # CI went unread in this repo. Red here means "Bing was not told", which is
+    # true, attributable, and worth seeing on its own.
+    needs: deploy
+    runs-on: ubuntu-latest
+    env:
+      SITE_URL: ${{ vars.SITE_URL || secrets.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # No build here, so there is no site/dist/sitemap.xml and the script falls
+      # back to fetching the live one. That is the better input for a post-deploy
+      # notification anyway: it reflects what is actually being served, not what
+      # a build on this runner would have produced.
       #
-      # Google is not an IndexNow participant. This notifies Bing and Yandex
-      # only, which is still the engine worth notifying -- measured 2026-10-06,
-      # bingbot made 167 requests to Googlebot's 9.
-      #
-      # A failure here means the notification did not happen, NOT that the deploy
-      # broke: the artifact is already live and verified. It still fails the job,
-      # because a notifier that fails quietly is exactly the shape of bug this
-      # repo keeps finding.
+      # Google is not an IndexNow participant. This tells Bing and Yandex only.
       - name: Notify IndexNow of changed URLs
         run: python3 scripts/indexnow.py --since "$(date -u +%F)"
 

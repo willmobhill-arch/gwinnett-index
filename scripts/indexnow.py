@@ -37,12 +37,14 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ENDPOINT = "https://api.indexnow.org/indexnow"
+UA = "gwindex-indexnow/1.0 (+https://www.gwindex.net)"
 BATCH = 10_000  # IndexNow's documented per-request ceiling
 NS = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 ROOT = Path(__file__).resolve().parent.parent
@@ -76,6 +78,39 @@ def find_key() -> tuple[str, Path]:
     )
 
 
+def verify_key(key_url: str, key: str, attempts: int = 6, delay: int = 20) -> bool:
+    """Confirm the key file is actually being served before submitting.
+
+    This exists because of how 403 presents. IndexNow's 403 means "the key file
+    could not be fetched, or its body did not match" -- one code for both halves,
+    so it tells you nothing about which. The first real submission got exactly
+    that, on a key file that was verifiably live, 200, text/plain, 32 bytes, body
+    matching, with zero requests to it in the zone's logs. The documented cause of
+    a first-submission 403 is submitting before the CDN is serving the new key
+    file; the documented remedy is to poll the key URL first and retry once.
+
+    So: prove the key is readable from outside, then submit. A failure here names
+    the actual problem instead of handing back an ambiguous 403.
+    """
+    for i in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(key_url, headers={"user-agent": UA})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                body = r.read(200).decode("utf-8", "replace").strip()
+            if r.status == 200 and body == key:
+                print(f"  key file verified at {key_url} (attempt {i})")
+                return True
+            print(f"  attempt {i}: {r.status}, body {body[:40]!r} — want 200 and {key[:12]}…")
+        except Exception as e:
+            print(f"  attempt {i}: {type(e).__name__}: {e}")
+        if i < attempts:
+            time.sleep(delay)
+    print(f"::error::key file at {key_url} never served the key. "
+          "IndexNow would answer 403 and blame the key; the real cause is that "
+          "this file is not readable yet.")
+    return False
+
+
 def load_sitemap(site: str) -> list[tuple[str, str]]:
     """Prefer the built sitemap on disk; fall back to the live one.
 
@@ -89,7 +124,7 @@ def load_sitemap(site: str) -> list[tuple[str, str]]:
     else:
         req = urllib.request.Request(
             f"{site}/sitemap.xml",
-            headers={"user-agent": "gwindex-indexnow/1.0 (+https://www.gwindex.net)"},
+            headers={"user-agent": UA},
         )
         with urllib.request.urlopen(req, timeout=120) as r:
             root = ET.fromstring(r.read())
@@ -104,7 +139,7 @@ def load_sitemap(site: str) -> list[tuple[str, str]]:
     return out
 
 
-def submit(host: str, key: str, key_url: str, urls: list[str]) -> int:
+def submit(host: str, key: str, key_url: str, urls: list[str], retry: bool = True) -> int:
     payload = json.dumps(
         {"host": host, "key": key, "keyLocation": key_url, "urlList": urls}
     ).encode()
@@ -112,7 +147,7 @@ def submit(host: str, key: str, key_url: str, urls: list[str]) -> int:
         ENDPOINT,
         data=payload,
         headers={"content-type": "application/json; charset=utf-8",
-                 "user-agent": "gwindex-indexnow/1.0 (+https://www.gwindex.net)"},
+                 "user-agent": UA},
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
@@ -123,11 +158,17 @@ def submit(host: str, key: str, key_url: str, urls: list[str]) -> int:
         print(f"::error::IndexNow request failed: {type(e).__name__}: {e}")
         return 1
     note = STATUS.get(code, "unrecognised status")
-    stream = print
     if code in (200, 202):
-        stream(f"  {code} {note} ({len(urls)} URLs)")
+        print(f"  {code} {note} ({len(urls)} URLs)")
         return 0
-    stream(f"::error::IndexNow returned {code} — {note}")
+    # 403 and 429 are the two the documented remedy covers: a key file the far
+    # side has not managed to read yet, and throttling. Both are worth exactly
+    # one more try after a pause. Anything else is not a waiting problem.
+    if retry and code in (403, 429):
+        print(f"  {code} {note} — retrying once in 45s")
+        time.sleep(45)
+        return submit(host, key, key_url, urls, retry=False)
+    print(f"::error::IndexNow returned {code} — {note}")
     return 1
 
 
@@ -186,6 +227,9 @@ def main() -> int:
         batches = (len(urls) + BATCH - 1) // BATCH
         print(f"dry run — would send {batches} request(s) of up to {BATCH} URLs")
         return 0
+
+    if not verify_key(key_url, key):
+        return 1
 
     rc = 0
     for i in range(0, len(urls), BATCH):
