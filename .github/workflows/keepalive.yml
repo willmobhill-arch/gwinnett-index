@@ -13,8 +13,20 @@ name: keepalive
 
 on:
   schedule:
-    # Daily. Deliberately not site.yml's '17 6 * * 1' slot, and not :00, so this
-    # does not queue behind the top-of-hour rush. UTC, like every GitHub cron.
+    # Daily at 07:41 UTC NOMINAL -- which is not when it runs. Measured against
+    # this repo's other scheduled workflow (site.yml, cron '17 6 * * 1'), the six
+    # most recent scheduled runs started 6.4 to 8.5 hours after their nominal
+    # time: 06:17 produced 12:40, 12:55, 12:55, 13:58, 14:03 and 14:48. GitHub
+    # queues scheduled events and this repo sits deep in that queue, so expect
+    # this job somewhere around 14:00-16:00 UTC. DO NOT read a missing run at
+    # 07:41 as a failure -- that cost one investigation already.
+    #
+    # Which minute is therefore nearly irrelevant. An earlier version of this
+    # comment claimed the slot was picked to dodge the top-of-hour rush; the
+    # measurement above does not support that, and it is deleted rather than
+    # softened. It also does not matter: the pause threshold is 7 days of low
+    # activity, so a daily run drifting by hours clears it with room to spare.
+    # UTC, like every GitHub cron.
     - cron: '41 7 * * *'
   workflow_dispatch:
 
