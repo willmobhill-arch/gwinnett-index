@@ -94,7 +94,39 @@ for (const a of ['GPTBot', 'ClaudeBot', 'OAI-SearchBot', 'Claude-SearchBot', 'Pe
 }
 if (!/Content-Signal:.*ai-input=yes/.test(robots)) fail.push('robots.txt lacks an affirmative Content-Signal');
 if (!robots.includes('Sitemap:')) fail.push('robots.txt does not declare the sitemap');
-if (!fail.some((f) => f.includes('robots.txt'))) ok.push('robots.txt names every target crawler and declares the sitemap');
+for (const a of ['SemrushBot', 'MJ12bot', 'DotBot']) {
+  if (!new RegExp(`User-agent: ${a}\\nDisallow: /`).test(robots)) fail.push(`robots.txt does not disallow ${a}`);
+}
+// The expensive direction. An AI target crawler landing in a Disallow block
+// would cut off the exact audience this index is built for, and every page
+// would still render perfectly while it happened -- the same shape as Bot Fight
+// Mode 403ing them. Assert the deny list never grows into the allow list.
+for (const a of ['GPTBot', 'ClaudeBot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot',
+                 'Perplexity-User', 'Google-Extended', 'Googlebot', 'Bingbot', 'CCBot',
+                 'Applebot', 'meta-externalagent', 'ChatGPT-User', 'Claude-User']) {
+  if (new RegExp(`User-agent: ${a}\\nDisallow`).test(robots)) fail.push(`robots.txt DISALLOWS ${a} -- that is the audience, not a crawler to block`);
+}
+if (!fail.some((f) => f.includes('robots.txt'))) ok.push('robots.txt names every target crawler, disallows the SEO-only ones, and declares the sitemap');
+
+// ------------------------------------------------------------- indexnow
+// IndexNow authenticates by fetching https://<host>/<key>.txt and checking the
+// body equals the key. If that file is missing from dist/ the endpoint returns
+// 403 forever and the submissions silently stop working, while every page still
+// renders perfectly -- so assert the file shipped, and that its contents still
+// match its name. scripts/indexnow.py derives the key FROM this file, so a
+// mismatch here is the only way the two can disagree.
+{
+  const keys = fs.readdirSync(DIST)
+    .filter((f) => /^[A-Za-z0-9-]{8,128}\.txt$/.test(f))
+    .filter((f) => read(f).trim() === f.replace(/\.txt$/, ''));
+  if (keys.length === 0) {
+    fail.push('no IndexNow key file in dist/ (a <key>.txt whose body is <key>) — submissions would 403');
+  } else if (keys.length > 1) {
+    fail.push(`${keys.length} IndexNow key files in dist/ — exactly one, or the script picks arbitrarily: ${keys.join(', ')}`);
+  } else {
+    ok.push(`IndexNow key file published (${keys[0]}) and its body matches its name`);
+  }
+}
 
 // -------------------------------------------------------------- llms.txt
 const llms = read('llms.txt');
