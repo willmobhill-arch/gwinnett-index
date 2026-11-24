@@ -259,6 +259,20 @@ def collect(token: str, days: int = 30) -> dict:
             # ATTEMPTS, not answers -- see probe_data_path(). A subrequest is a
             # fetch that happened, whether Supabase answered it or not.
             #
+            # AND IT IS SAMPLED. workersInvocationsAdaptive is an adaptive
+            # dataset: measured 2026-11-24, every daily value over 30 days was a
+            # multiple of 10 (only 10, 20 and 40 appeared), while the zone's
+            # httpRequests1dGroups over the same window returned 8188, 6016,
+            # 6134 -- unsampled. So this total is an estimate scaled by the
+            # sample interval, and a day reading 0 means no sample was captured.
+            #
+            # That distinction is not academic. The old render printed
+            # "(21 of 30 days non-zero)", which reads as nine days of no tool
+            # calls at all. It was wrong: the keepalive had run and succeeded on
+            # 39 consecutive days, each making a live /v1 request that costs a
+            # subrequest, so the floor was one per day. The render now says the
+            # figure is sampled instead of implying a precision it lacks.
+            #
             # AND IT COUNTS OUR OWN PROBES. probe_data_path() below hits
             # /v1/jurisdictions, which costs a Supabase subrequest, so every run
             # of this script adds 1; the daily keepalive's live-site check adds
@@ -311,13 +325,16 @@ def render(d: dict) -> None:
     print(f"  corpus      {z['requests']:>9,} requests   {z['page_views']:>9,} pageviews"
           f"   {z['bytes']/1e9:.2f} GB   {z['cache_hit_pct']}% cached")
     print(f"  worker      {w['requests']:>9,} invocations  {w['errors']} errors")
-    print(f"  TOOL CALLS  {w['subrequest_attempts']:>9,} attempts     "
-          f"({len(w['subrequest_attempts_daily'])} of {d['window_days']} days non-zero)")
-    print("              includes this script's own probe (1/run) and the keepalive's"
-          " (1/run)\n              — an upper bound on real demand, not a count of it")
+    print(f"  TOOL CALLS ~{w['subrequest_attempts']:>9,} attempts     "
+          f"(SAMPLED estimate, not a count — see below)")
+    print("              · workersInvocationsAdaptive is sampled: every value comes")
+    print("                back a multiple of the sample interval, so a day reading 0")
+    print("                means no sample was captured, NOT a day with no activity.")
+    print("              · includes this script's own probe (1/run) and the")
+    print("                keepalive's (1/run), which cannot be subtracted here.")
     if w["subrequest_attempts_daily"]:
         tail = w["subrequest_attempts_daily"][-7:]
-        print("              last 7 active days: " + "  ".join(f"{r['date'][5:]}={r['n']}" for r in tail))
+        print("              last 7 sampled days: " + "  ".join(f"{r['date'][5:]}={r['n']}" for r in tail))
 
     print(f"\n  last 24h ({h['requests_sampled']:,} requests)")
     print(f"    .md twin fetches   {h['md_twin_fetches']:,}")
